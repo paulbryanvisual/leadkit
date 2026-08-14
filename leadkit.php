@@ -1,0 +1,199 @@
+<?php
+/**
+ * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
+ * Plugin URI:        https://github.com/paulbryanvisual/leadkit
+ * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
+ * Version:           1.0.0
+ * Requires at least: 6.4
+ * Requires PHP:      7.4
+ * Author:            Paul Bryan Visual
+ * License:           GPL-2.0-or-later
+ * Text Domain:       leadkit
+ * Update URI:        https://github.com/paulbryanvisual/leadkit
+ *
+ * @package LeadKit
+ *
+ * The server side is NOT in this plugin: submissions POST to an endpoint you
+ * configure (Settings → LeadKit). The reference implementation is a set of
+ * Cloudflare Pages Functions — /api/submit (form + Turnstile verify),
+ * /api/sync-lead and /api/track-interaction (tracker) — see readme.txt for the
+ * exact payload contract so new projects can stand up compatible endpoints.
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+define( 'LEADKIT_VERSION', '1.0.0' );
+define( 'LEADKIT_DIR', __DIR__ );
+define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
+
+require_once LEADKIT_DIR . '/includes/form.php';
+require_once LEADKIT_DIR . '/includes/settings.php';
+
+/**
+ * One option, one array — portable and easy to export between installs.
+ *
+ * @return array{submit_url:string,sync_url:string,track_url:string,turnstile_sitekey:string,storage_prefix:string}
+ */
+function leadkit_options() {
+	$defaults = array(
+		'submit_url'        => '/api/submit',
+		'sync_url'          => '/api/sync-lead',
+		'track_url'         => '/api/track-interaction',
+		'turnstile_sitekey' => '',
+		'storage_prefix'    => 'leadkit',
+	);
+
+	$opts = get_option( 'leadkit_options', array() );
+
+	return wp_parse_args( is_array( $opts ) ? $opts : array(), $defaults );
+}
+
+/**
+ * First activation on a site that already carried the theme-era options picks
+ * them up, so "move the form into a plugin" does not mean re-typing settings.
+ */
+register_activation_hook(
+	__FILE__,
+	function () {
+		if ( get_option( 'leadkit_options' ) ) {
+			return;
+		}
+
+		$seed = array();
+		foreach ( array(
+			'submit_url'        => 'roger_form_endpoint',
+			'turnstile_sitekey' => 'roger_turnstile_sitekey',
+		) as $ours => $theirs ) {
+			$val = get_option( $theirs, '' );
+			if ( $val ) {
+				$seed[ $ours ] = $val;
+			}
+		}
+		if ( defined( 'ROGER_TURNSTILE_SITEKEY' ) && ROGER_TURNSTILE_SITEKEY ) {
+			$seed['turnstile_sitekey'] = ROGER_TURNSTILE_SITEKEY;
+		}
+
+		if ( $seed ) {
+			update_option( 'leadkit_options', $seed );
+		}
+	}
+);
+
+/**
+ * The visitor tracker, on every front-end page.
+ *
+ * Deferred: it only binds listeners, so it has no business on the critical
+ * path. The config the script needs travels as JSON printed before it.
+ */
+add_action(
+	'wp_enqueue_scripts',
+	function () {
+		if ( is_admin() ) {
+			return;
+		}
+
+		$opts = leadkit_options();
+
+		wp_enqueue_script(
+			'leadkit-tracker',
+			LEADKIT_URL . 'assets/tracker.js',
+			array(),
+			LEADKIT_VERSION,
+			array(
+				'strategy'  => 'defer',
+				'in_footer' => true,
+			)
+		);
+
+		wp_add_inline_script(
+			'leadkit-tracker',
+			'window.LeadKitCfg = ' . wp_json_encode(
+				array(
+					'submitAction'  => $opts['submit_url'],
+					'syncUrl'       => $opts['sync_url'],
+					'trackUrl'      => $opts['track_url'],
+					'storagePrefix' => $opts['storage_prefix'],
+				)
+			) . ';',
+			'before'
+		);
+	}
+);
+
+/**
+ * Turnstile, mounted on first interaction with the form.
+ *
+ * The eager widget measured ~600 KB on every page of the original build — a
+ * challenge iframe, api.js, a challenge script and a 471 KB XHR — on pages with
+ * no intention of submitting anything. Deferring the mount to the first focus
+ * or pointer over the form keeps the protection and removes the cost from every
+ * page where the form is never touched. Tiny and inlined: no request.
+ */
+add_action(
+	'wp_footer',
+	function () {
+		$opts = leadkit_options();
+
+		if ( ! $opts['turnstile_sitekey'] || ! leadkit_form_was_rendered() ) {
+			return;
+		}
+		?>
+<script>
+(function(){
+	var form = document.querySelector('form[data-leadkit]');
+	var box  = document.getElementById('leadkit-turnstile');
+	if (!form || !box) return;
+
+	var mounted = false;
+	function mount() {
+		if (mounted) return;
+		mounted = true;
+		['focusin','pointerdown'].forEach(function(e){ form.removeEventListener(e, mount); });
+		var s = document.createElement('script');
+		s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+		s.async = true;
+		s.defer = true;
+		document.head.appendChild(s);
+	}
+
+	['focusin','pointerdown'].forEach(function(e){ form.addEventListener(e, mount, {once:false, passive:true}); });
+	form.addEventListener('submit', function(){ setTimeout(function(){ window.turnstile && window.turnstile.reset(); }, 0); });
+})();
+</script>
+		<?php
+	},
+	20
+);
+
+/**
+ * Default styles — ONLY when the host theme has not claimed the markup with
+ * its own class prefix. A theme that renders leadkit_form() under its own
+ * prefix (this project uses main-footer) already styles every element, and
+ * shipping CSS on top of that would be the drift this plugin exists to avoid.
+ */
+add_action(
+	'wp_enqueue_scripts',
+	function () {
+		if ( apply_filters( 'leadkit/load_default_styles', true ) ) {
+			wp_register_style( 'leadkit-form', LEADKIT_URL . 'assets/leadkit.css', array(), LEADKIT_VERSION );
+		}
+	},
+	11
+);
+
+add_shortcode(
+	'leadkit_form',
+	function ( $atts ) {
+		$atts = shortcode_atts(
+			array(
+				'class_prefix' => 'leadkit-form',
+			),
+			$atts,
+			'leadkit_form'
+		);
+
+		return leadkit_form( $atts, false );
+	}
+);
