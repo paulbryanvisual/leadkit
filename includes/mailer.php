@@ -104,6 +104,16 @@ add_filter(
 
 		if ( false !== stripos( $parsed['content_type'], 'text/html' ) ) {
 			$payload['html'] = (string) ( $atts['message'] ?? '' );
+
+			/*
+			 * Send a plain-text part alongside the HTML.
+			 *
+			 * Two reasons, and neither is cosmetic. Filters treat an HTML-only
+			 * message as more spam-like than a multipart one. And a recipient
+			 * whose client blocks HTML — or who reads mail on a watch — gets
+			 * the words instead of an empty message.
+			 */
+			$payload['text'] = leadkit_html_to_text( (string) ( $atts['message'] ?? '' ) );
 		} else {
 			$payload['text'] = (string) ( $atts['message'] ?? '' );
 		}
@@ -244,4 +254,52 @@ function leadkit_turnstile_secret() {
 	$opts = leadkit_options();
 
 	return (string) $opts['turnstile_secret'];
+}
+
+/**
+ * A readable plain-text rendering of an HTML email.
+ *
+ * Not a general converter — it only has to handle the mail this plugin builds.
+ * The block elements become line breaks, links keep their href in brackets so a
+ * text reader can still reach them, and the rest is stripped.
+ *
+ * @param string $html HTML body.
+ * @return string
+ */
+function leadkit_html_to_text( $html ) {
+	$text = preg_replace( '#<(script|style)[^>]*>.*?</\1>#is', '', $html );
+
+	// Keep the destination of a link, which is the one thing stripping tags loses.
+	$text = preg_replace_callback(
+		'#<a\s[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>#is',
+		function ( $m ) {
+			$label = trim( wp_strip_all_tags( $m[2] ) );
+			$href  = trim( $m[1] );
+			if ( '' === $label ) {
+				return $href;
+			}
+			return false !== strpos( $href, $label ) ? $label : $label . ' <' . $href . '>';
+		},
+		(string) $text
+	);
+
+	/*
+	 * Break on the OPENING block tag as well as the closing one. Closing tags
+	 * alone put a break after the element, which is wrong when an inline
+	 * element sits immediately before a block — the badge ran straight into the
+	 * summary as "Hot leadRead for 4m 9s".
+	 */
+	$text = preg_replace( '#<(p|div|tr|h[1-6]|li)[^>]*>#i', "\n", (string) $text );
+	$text = preg_replace( '#</(p|div|tr|h[1-6]|li)>#i', "\n", (string) $text );
+	$text = preg_replace( '#<br\s*/?>#i', "\n", (string) $text );
+	$text = preg_replace( '#</td>#i', "  ", (string) $text );
+	$text = wp_strip_all_tags( (string) $text );
+	$text = html_entity_decode( $text, ENT_QUOTES, 'UTF-8' );
+
+	// Collapse the whitespace the table layout leaves behind.
+	$text = preg_replace( '/[ \t]+/', ' ', $text );
+	$text = preg_replace( '/ ?\n ?/', "\n", (string) $text );
+	$text = preg_replace( '/\n{3,}/', "\n\n", (string) $text );
+
+	return trim( (string) $text );
 }
