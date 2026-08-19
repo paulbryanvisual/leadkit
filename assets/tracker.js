@@ -99,6 +99,42 @@
 			};
 		}
 
+		/*
+		 * The photograph itself, independent of which rendition was on screen.
+		 *
+		 * A thumbnail is foo-400x300.jpg and the lightbox shows foo-1024x768.jpg
+		 * — the same picture. Counting the raw src would count one photograph
+		 * twice, which is how "opened 6 photographs" happens when they opened
+		 * three.
+		 */
+		photoStem( src ) {
+			try {
+				var file = decodeURIComponent( String( src ).split( '?' )[ 0 ].split( '/' ).pop() );
+				return file
+					.replace( /\.(jpe?g|png|webp|gif|avif)$/i, '' )
+					.replace( /-\d+x\d+$/i, '' )
+					.replace( /-scaled$/i, '' )
+					.toLowerCase();
+			} catch ( e ) {
+				return String( src );
+			}
+		}
+
+		/**
+		 * Log a photograph the visitor chose to look at, once per photograph.
+		 */
+		logPhoto( src ) {
+			if ( ! src ) return;
+			var stem = this.photoStem( src );
+			if ( ! stem ) return;
+
+			this.data.photos_seen = this.data.photos_seen || [];
+			if ( this.data.photos_seen.indexOf( stem ) !== -1 ) return;
+
+			this.data.photos_seen.push( stem );
+			this.logEvent( 'photo_click', src );
+		}
+
 		logEvent( type, value ) {
 			this.data.events.push( {
 				type: type,
@@ -208,6 +244,39 @@
 				self.recordPageView();
 			} );
 
+			/*
+			 * Photographs viewed by advancing through a lightbox.
+			 *
+			 * The click handler below only sees images inside <main> or
+			 * <article>. A lightbox lives outside the content — so opening one
+			 * photograph and then browsing to five more with the arrows recorded
+			 * exactly one, which is the opposite of the signal being collected:
+			 * the person who looks at six photographs of the same wet room is the
+			 * one worth ringing first.
+			 *
+			 * Watching the `src` attribute rather than the arrow buttons is
+			 * deliberate. Every lightbox swaps the source of one <img>, whatever
+			 * it calls its controls, so this also catches keyboard arrows and
+			 * swipes — and works in a theme this plugin has never met.
+			 */
+			if ( window.MutationObserver ) {
+				var viewer = new MutationObserver( function ( records ) {
+					records.forEach( function ( r ) {
+						var img = r.target;
+						if ( ! img || img.tagName !== 'IMG' ) return;
+						// Content images are already handled by the click below.
+						if ( img.closest( 'main' ) || img.closest( 'article' ) ) return;
+						var src = img.getAttribute( 'src' );
+						if ( src ) self.logPhoto( src );
+					} );
+				} );
+				viewer.observe( document.body, {
+					subtree: true,
+					attributes: true,
+					attributeFilter: [ 'src' ],
+				} );
+			}
+
 			// Photo clicks (lightbox images in the content), tel: and mailto: clicks.
 			document.body.addEventListener(
 				'click',
@@ -232,7 +301,7 @@
 						}
 						var src = targetImg.getAttribute( 'src' );
 						if ( src ) {
-							self.logEvent( 'photo_click', src );
+							self.logPhoto( src );
 						}
 					}
 
