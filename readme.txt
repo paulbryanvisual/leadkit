@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -66,6 +66,25 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.1.0 =
+* Submissions are handled by the plugin. LeadKit previously POSTed to an endpoint
+  you configured elsewhere; when that endpoint moved, forms 404ed with no error
+  anywhere. There is now a REST route, `leadkit/v1/submit`.
+* Leads are stored as a `leadkit_lead` post type — visible in wp-admin the moment
+  they arrive, and stored BEFORE the notification is attempted, so a mail failure
+  cannot lose one.
+* Notification email is HTML and carries the visitor's journey: the pages they
+  read, how long for, how far they scrolled, the photographs they opened and
+  whether they tapped the phone number.
+* Optional delivery through an HTTPS mail API, for hosts whose own mail transport
+  is unauthenticated or blocked.
+* Turnstile is verified properly: `success`, `action` and `hostname`, failing
+  closed when Cloudflare is unreachable.
+* Several recipients, comma-separated.
+* Honeypot field and a per-IP rate limit.
+* Fix: on a page with two forms, only the first ever mounted a Turnstile widget.
+* Fix: photographs viewed by advancing through a lightbox were not counted.
 
 = 1.0.0 =
 * First extraction from the Roger England theme: form renderer, Turnstile
