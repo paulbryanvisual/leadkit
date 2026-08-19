@@ -204,7 +204,15 @@ function leadkit_form( $args = array(), $output = true ) {
 		 */
 		?>
 	<div class="<?= esc_attr( $p ) ?>__group <?= esc_attr( $p ) ?>__turnstile" style="min-height: 65px;">
-		<div id="leadkit-turnstile" class="cf-turnstile" data-sitekey="<?= esc_attr( $opts['turnstile_sitekey'] ) ?>" data-action="<?= esc_attr( $args['turnstile_action'] ) ?>"></div>
+		<?php
+		/*
+		 * The id carries the form's own prefix. It used to be a bare
+		 * `leadkit-turnstile`, which on any page with both the content form and
+		 * the footer form was the same id twice — invalid, and the mount script
+		 * resolved it to whichever came first.
+		 */
+		?>
+		<div id="leadkit-turnstile-<?= esc_attr( sanitize_key( $p ) ) ?>" class="cf-turnstile" data-sitekey="<?= esc_attr( $opts['turnstile_sitekey'] ) ?>" data-action="<?= esc_attr( $args['turnstile_action'] ) ?>"></div>
 	</div>
 	<?php endif; ?>
 	<button type="submit" class="<?= esc_attr( $submit_class ) ?>"><?= esc_html( $args['submit_text'] ) ?></button>

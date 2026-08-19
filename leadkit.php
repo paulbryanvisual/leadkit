@@ -168,15 +168,22 @@ add_action(
 		?>
 <script>
 (function(){
-	var form = document.querySelector('form[data-leadkit]');
-	var box  = document.getElementById('leadkit-turnstile');
-	if (!form || !box) return;
+	/*
+	 * EVERY form on the page, not the first one.
+	 *
+	 * This used to be querySelector — singular — so on a page carrying both the
+	 * content form and the footer form, only the first ever got the mount
+	 * listeners. The other never loaded api.js, so its widget never rendered,
+	 * so it could never produce a token. With a secret configured that form
+	 * would be rejected on every submission, silently, while the other worked.
+	 */
+	var forms = document.querySelectorAll('form[data-leadkit]');
+	if (!forms.length) return;
 
-	var mounted = false;
+	var loading = false;
 	function mount() {
-		if (mounted) return;
-		mounted = true;
-		['focusin','pointerdown'].forEach(function(e){ form.removeEventListener(e, mount); });
+		if (loading) return;
+		loading = true;
 		var s = document.createElement('script');
 		s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
 		s.async = true;
@@ -184,8 +191,25 @@ add_action(
 		document.head.appendChild(s);
 	}
 
-	['focusin','pointerdown'].forEach(function(e){ form.addEventListener(e, mount, {once:false, passive:true}); });
-	form.addEventListener('submit', function(){ setTimeout(function(){ window.turnstile && window.turnstile.reset(); }, 0); });
+	Array.prototype.forEach.call(forms, function (form) {
+		if (!form.querySelector('.cf-turnstile')) return;
+
+		['focusin','pointerdown'].forEach(function (e) {
+			form.addEventListener(e, mount, {once:true, passive:true});
+		});
+
+		/*
+		 * A token is single-use. Reset THIS form's widget, by passing its own
+		 * container — bare reset() acts on the first widget on the page, which
+		 * with two forms is the wrong one.
+		 */
+		form.addEventListener('submit', function () {
+			var box = form.querySelector('.cf-turnstile');
+			setTimeout(function () {
+				if (window.turnstile && box) { window.turnstile.reset(box); }
+			}, 0);
+		});
+	});
 })();
 </script>
 		<?php
