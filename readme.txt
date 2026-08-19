@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -66,6 +66,11 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.2.1 =
+* The repository is public, so updates need no authentication. The GitHub token
+  setting is removed, and a token stored by 1.2.0 is deleted from the database
+  on upgrade. Revoke it on GitHub too — nothing here can do that for you.
 
 = 1.2.0 =
 * Block: "Lead form" can now be placed from the editor, with the heading,

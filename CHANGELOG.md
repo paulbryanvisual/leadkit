@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.1
+
+The repository is public now, so updates need no authentication and the token
+setting has no reason to exist. A credential field nobody needs is somewhere a
+credential ends up for no reason.
+
+- The **GitHub token** setting is gone. `LEADKIT_GITHUB_TOKEN` in wp-config.php
+  still works, for anyone whose fork is private.
+- A token saved by 1.2.0 is **deleted from the database on upgrade**. Removing
+  the field alone would have left it sitting in `wp_options`, travelling in
+  every export and backup, for a value nothing reads. Revoke it on GitHub as
+  well — that part cannot be automated from here.
+
 ## 1.2.0
 
 Two ways of installing it that do not involve a file manager.

@@ -46,14 +46,44 @@ const LEADKIT_GH_REPO  = 'leadkit';
  * @return string
  */
 function leadkit_github_token() {
+	/*
+	 * Constant only — there is no setting for this any more.
+	 *
+	 * The repository is public, so updates need no authentication at all, and a
+	 * credential field nobody needs is somewhere a credential ends up for no
+	 * reason. If the repository is ever made private again, define this in
+	 * wp-config.php and everything works as before:
+	 *
+	 *     define( 'LEADKIT_GITHUB_TOKEN', 'github_pat_…' );
+	 */
 	if ( defined( 'LEADKIT_GITHUB_TOKEN' ) && LEADKIT_GITHUB_TOKEN ) {
 		return (string) LEADKIT_GITHUB_TOKEN;
 	}
 
-	$opts = leadkit_options();
-
-	return (string) ( $opts['github_token'] ?? '' );
+	return '';
 }
+
+/**
+ * Forget a token stored by an earlier version.
+ *
+ * 1.2.0 offered a settings field for this, and sites that used it have the
+ * token sitting in `wp_options` — travelling in every database export and
+ * backup for a credential that is no longer read. Removing the field would
+ * leave it there invisibly, so it is deleted rather than orphaned.
+ *
+ * The token itself should still be revoked on GitHub; nothing here can do that.
+ */
+add_action(
+	'admin_init',
+	function () {
+		$opts = get_option( 'leadkit_options', array() );
+
+		if ( is_array( $opts ) && array_key_exists( 'github_token', $opts ) ) {
+			unset( $opts['github_token'] );
+			update_option( 'leadkit_options', $opts );
+		}
+	}
+);
 
 /**
  * Request headers for the GitHub API.
