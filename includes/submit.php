@@ -245,7 +245,76 @@ function leadkit_notify( $post_id, $fields, $opts ) {
 }
 
 /**
- * Verify a Turnstile token.
+ * The Turnstile actions this site will accept.
+ *
+ * Checking the action stops a token minted for somebody else's widget — or for
+ * a different surface — being replayed here. It is checked as an ALLOWLIST
+ * rather than per-form on purpose: the form tells us which form it is, and the
+ * form is the part an attacker controls, so trusting it to say what to expect
+ * would verify nothing. Both surfaces here are the same public contact form at
+ * the same trust level, so one list is honest about what is actually enforced.
+ *
+ * @return string[]
+ */
+function leadkit_turnstile_actions() {
+	$opts    = leadkit_options();
+	$actions = array_filter( array_map( 'trim', explode( ',', (string) $opts['turnstile_actions'] ) ) );
+
+	if ( ! $actions ) {
+		$actions = array( 'leadkit-form' );
+	}
+
+	/**
+	 * Filter the accepted Turnstile actions.
+	 *
+	 * @param string[] $actions Accepted `data-action` values.
+	 */
+	return array_values( array_unique( (array) apply_filters( 'leadkit_turnstile_actions', $actions ) ) );
+}
+
+/**
+ * The hostnames a token may have been solved on.
+ *
+ * Derived from this install's own home URL, which makes it correct per
+ * environment without configuration — production allows the production host,
+ * and a local site allows the local host. That is the reason not to hard-code a
+ * list: a production allowlist containing `localhost` accepts a token solved
+ * anywhere, which is the whole check gone.
+ *
+ * @return string[]
+ */
+function leadkit_turnstile_hostnames() {
+	$host  = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+	$hosts = array( $host );
+
+	// Cloudflare reports the hostname the widget was solved on, which may carry
+	// the www the canonical URL does not.
+	$hosts[] = 0 === strpos( $host, 'www.' ) ? substr( $host, 4 ) : 'www.' . $host;
+
+	/*
+	 * The setting ADDS to this site's own hostname; it cannot replace it. A
+	 * field that replaced the derived value would let someone type `localhost`
+	 * into a production box and accept a token solved anywhere, which is the
+	 * entire check gone — and it would look like a working configuration.
+	 */
+	$opts  = leadkit_options();
+	$hosts = array_merge( $hosts, array_filter( array_map( 'trim', explode( ',', (string) $opts['turnstile_hostnames'] ) ) ) );
+
+	/**
+	 * Filter the accepted Turnstile hostnames.
+	 *
+	 * @param string[] $hosts Accepted hostnames.
+	 */
+	return array_values( array_unique( array_filter( (array) apply_filters( 'leadkit_turnstile_hostnames', $hosts ) ) ) );
+}
+
+/**
+ * Verify a Turnstile token: solved, for us, on one of our pages.
+ *
+ * `success` alone is not verification. A token is minted for a specific widget
+ * and a specific action on a specific hostname, and siteverify reports all
+ * three — so checking only the first accepts a token solved on any site whose
+ * widget shares this secret, and any token replayed from another surface.
  *
  * @param string $token  Client token.
  * @param string $secret Secret key.
@@ -253,13 +322,16 @@ function leadkit_notify( $post_id, $fields, $opts ) {
  * @return bool
  */
 function leadkit_verify_turnstile( $token, $secret, $ip ) {
-	if ( '' === $token ) {
+	// Bound the input before spending a request on it. Real tokens are well
+	// under this; anything longer is someone probing.
+	if ( ! is_string( $token ) || '' === $token || strlen( $token ) > 2048 ) {
 		return false;
 	}
+
 	$res = wp_remote_post(
 		'https://challenges.cloudflare.com/turnstile/v0/siteverify',
 		array(
-			'timeout' => 8,
+			'timeout' => 10,
 			'body'    => array(
 				'secret'   => $secret,
 				'response' => $token,
@@ -267,15 +339,40 @@ function leadkit_verify_turnstile( $token, $secret, $ip ) {
 			),
 		)
 	);
-	if ( is_wp_error( $res ) ) {
-		/*
-		 * Cloudflare being unreachable is our problem, not the visitor's. Fail
-		 * OPEN: a spam lead is an annoyance, a lost customer is not.
+
+	if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+		/**
+		 * FAIL CLOSED when Cloudflare cannot be reached.
+		 *
+		 * The earlier version of this returned true here, reasoning that a spam
+		 * lead is an annoyance and a lost customer is not. That reasoning is
+		 * about the business, and it is not wrong — but as a default it means an
+		 * unreachable verifier silently disables verification, which is exactly
+		 * the condition an attacker would arrange. Cloudflare's guidance is to
+		 * fail closed, so that is the default — and it is a SETTING rather than
+		 * only a filter, because the trade-off is the site owner's to make and
+		 * they should not need a developer to make it.
+		 *
+		 * @param bool $fail_open Whether to accept when siteverify is unreachable.
 		 */
-		return true;
+		$opts = leadkit_options();
+
+		return (bool) apply_filters( 'leadkit_turnstile_fail_open', '1' === $opts['turnstile_fail_open'] );
 	}
+
 	$body = json_decode( (string) wp_remote_retrieve_body( $res ), true );
-	return ! empty( $body['success'] );
+
+	if ( ! is_array( $body ) || empty( $body['success'] ) ) {
+		return false;
+	}
+	if ( ! in_array( (string) ( $body['action'] ?? '' ), leadkit_turnstile_actions(), true ) ) {
+		return false;
+	}
+	if ( ! in_array( (string) ( $body['hostname'] ?? '' ), leadkit_turnstile_hostnames(), true ) ) {
+		return false;
+	}
+
+	return true;
 }
 
 /**
