@@ -13,13 +13,21 @@
  * outbound 587 and 465, and an SMTP plugin that cannot connect fails in exactly
  * the same invisible way as the thing it was installed to fix.
  *
- * THE KEY LIVES IN wp-config.php, not the database:
+ * THE KEY IS A SETTING. Paste it into Settings → LeadKit and the plugin works;
+ * needing a file edit to send an email is not a working plugin.
+ *
+ * It is stored write-only: the field never renders the saved value, and saving
+ * the form with the box empty keeps what is already there. That removes the
+ * everyday exposure — a secret echoed into admin HTML is read by anything that
+ * can see the screen.
+ *
+ * What it cannot remove is that an option travels in every database export and
+ * sits in every backup. For sites that mind — this one moves databases between
+ * hosts routinely — the same value in wp-config.php takes precedence:
  *
  *     define( 'LEADKIT_RESEND_API_KEY', 're_xxxxxxxx' );
  *
- * A credential in `wp_options` travels in every database export, sits in every
- * backup, and is readable by anyone who reaches the admin. A constant is in one
- * file that is never exported and never in the repository.
+ * Both work. The constant is the harder option, not the required one.
  *
  * @package LeadKit
  */
@@ -38,12 +46,14 @@ function leadkit_api_key() {
 		return (string) LEADKIT_RESEND_API_KEY;
 	}
 
+	$opts = leadkit_options();
+
 	/**
 	 * Filter the API key, for sites keeping secrets somewhere else again.
 	 *
 	 * @param string $key API key.
 	 */
-	return (string) apply_filters( 'leadkit_api_key', '' );
+	return (string) apply_filters( 'leadkit_api_key', (string) $opts['resend_api_key'] );
 }
 
 /**

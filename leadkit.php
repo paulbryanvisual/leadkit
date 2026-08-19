@@ -51,6 +51,7 @@ function leadkit_options() {
 		'track_url'         => '/api/track-interaction',
 		'turnstile_sitekey' => '',
 		'turnstile_secret'  => '',
+		'resend_api_key'    => '',
 		'turnstile_actions'   => '',
 		'turnstile_hostnames' => '',
 		'turnstile_fail_open' => '',
