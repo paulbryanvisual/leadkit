@@ -44,6 +44,31 @@ function leadkit_keep_secret( $submitted, $key ) {
 	return '' === $submitted ? $existing : $submitted;
 }
 
+
+/**
+ * Sanitise a comma-separated list of recipients.
+ *
+ * Invalid entries are dropped rather than saved, so a typo cannot quietly break
+ * delivery for everyone on the line — wp_mail() refuses the whole message if any
+ * recipient is malformed, which would turn one wrong character into no
+ * notifications at all.
+ *
+ * @param string $raw Comma-separated addresses.
+ * @return string
+ */
+function leadkit_clean_email_list( $raw ) {
+	$out = array();
+
+	foreach ( explode( ',', (string) $raw ) as $candidate ) {
+		$email = sanitize_email( trim( $candidate ) );
+		if ( $email && is_email( $email ) ) {
+			$out[] = $email;
+		}
+	}
+
+	return implode( ', ', array_unique( $out ) );
+}
+
 add_action(
 	'admin_init',
 	function () {
@@ -72,7 +97,7 @@ add_action(
 						'turnstile_actions'   => sanitize_text_field( $raw['turnstile_actions'] ?? '' ),
 						'turnstile_hostnames' => sanitize_text_field( $raw['turnstile_hostnames'] ?? '' ),
 						'turnstile_fail_open' => empty( $raw['turnstile_fail_open'] ) ? '' : '1',
-						'notify_email'      => sanitize_email( $raw['notify_email'] ?? '' ),
+						'notify_email'      => leadkit_clean_email_list( $raw['notify_email'] ?? '' ),
 						'from_email'        => sanitize_email( $raw['from_email'] ?? '' ),
 						'from_name'         => sanitize_text_field( $raw['from_name'] ?? '' ),
 						'storage_prefix'    => preg_replace( '/[^a-zA-Z0-9_]/', '', $raw['storage_prefix'] ?? 'leadkit' ) ?: 'leadkit',
@@ -96,7 +121,7 @@ function leadkit_render_settings_page() {
 		'resend_api_key'    => array( __( 'Resend API key', 'leadkit' ), __( 'Paste the key from resend.com/api-keys. Without it, mail goes out through the host’s own transport, which on shared hosting usually means the spam folder. Never shown again once saved; leave empty to keep the current one, or type a single - to clear it.', 'leadkit' ), 'secret' ),
 		'from_email'        => array( __( 'Send FROM this address', 'leadkit' ), __( 'Must be on a domain verified with your mail provider — not necessarily this site’s domain. An address on a domain with no SPF is what spam looks like, and it will be filtered.', 'leadkit' ) ),
 		'from_name'         => array( __( 'Send FROM this name', 'leadkit' ), __( 'The sender name recipients see. Defaults to the site title.', 'leadkit' ) ),
-		'notify_email'      => array( __( 'Send leads to', 'leadkit' ), __( 'Where each enquiry is emailed. Empty uses the site admin address. Every lead is saved under Leads either way, so a mail problem never loses one.', 'leadkit' ) ),
+		'notify_email'      => array( __( 'Send leads to', 'leadkit' ), __( 'One address, or several separated by commas — everyone listed gets a copy. Empty uses the site admin address. Anything that is not a valid address is dropped when you save, rather than saved and silently breaking delivery for the rest. Every lead is saved under Leads either way, so a mail problem never loses one.', 'leadkit' ) ),
 		'submit_url'        => array( __( 'Form submit endpoint', 'leadkit' ), __( 'Leave EMPTY to use this plugin’s own endpoint, which is what almost every site wants. Only set this if you have your own service handling submissions.', 'leadkit' ) ),
 		'sync_url'          => array( __( 'Tracker sync endpoint', 'leadkit' ), __( 'Receives background analytics for known leads (JSON).', 'leadkit' ) ),
 		'track_url'         => array( __( 'Interaction endpoint', 'leadkit' ), __( 'Receives the first phone/email click with full session context (JSON).', 'leadkit' ) ),

@@ -158,11 +158,27 @@ add_action(
 				echo '<div style="white-space:pre-wrap;background:#f6f7f7;padding:1rem;border:1px solid #dcdcde">'
 					. esc_html( (string) get_post_meta( $post->ID, '_leadkit_message', true ) ) . '</div>';
 
+				/*
+				 * The journey, drawn. This used to be the raw JSON in a <pre>,
+				 * which is the same information and nobody read it — the point
+				 * of collecting how long someone spent on the bathrooms page is
+				 * that whoever rings them back can see it at a glance.
+				 */
 				$analytics = (string) get_post_meta( $post->ID, '_leadkit_analytics', true );
+				$journey   = $analytics ? leadkit_render_journey( $analytics ) : '';
+
+				if ( $journey ) {
+					echo '<h2 style="margin:1.5em 0 .6em;font-size:14px">' . esc_html__( 'User journey', 'leadkit' ) . '</h2>';
+					echo '<div style="background:#fff;border:1px solid #dcdcde;padding:1rem">';
+					echo $journey; // phpcs:ignore WordPress.Security.EscapeOutput — built and escaped in leadkit_render_journey().
+					echo '</div>';
+				}
+
 				if ( $analytics ) {
-					echo '<p><strong>' . esc_html__( 'Session', 'leadkit' ) . '</strong></p>';
+					echo '<details style="margin-top:1em"><summary style="cursor:pointer;color:#646970">'
+						. esc_html__( 'Raw session data', 'leadkit' ) . '</summary>';
 					echo '<pre style="white-space:pre-wrap;background:#f6f7f7;padding:1rem;border:1px solid #dcdcde;max-height:22em;overflow:auto">'
-						. esc_html( $analytics ) . '</pre>';
+						. esc_html( $analytics ) . '</pre></details>';
 				}
 			},
 			LEADKIT_CPT,

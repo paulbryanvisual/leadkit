@@ -34,6 +34,7 @@ define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 require_once LEADKIT_DIR . '/includes/form.php';
 require_once LEADKIT_DIR . '/includes/settings.php';
 require_once LEADKIT_DIR . '/includes/mailer.php';
+require_once LEADKIT_DIR . '/includes/journey.php';
 require_once LEADKIT_DIR . '/includes/leads.php';
 require_once LEADKIT_DIR . '/includes/submit.php';
 

@@ -171,7 +171,17 @@ function leadkit_handle_submit( $req ) {
  * @return void
  */
 function leadkit_notify( $post_id, $fields, $opts ) {
-	$to = ! empty( $opts['notify_email'] ) ? $opts['notify_email'] : get_option( 'admin_email' );
+	/*
+	 * Several recipients, because a lead usually needs to reach more than one
+	 * person — the owner and whoever handles the enquiries. One wp_mail() call
+	 * with a list, not one call each: a single message with everyone on it
+	 * means a reply is visible to all of them, and it is one send against the
+	 * provider's rate limit rather than N.
+	 */
+	$to = array_filter( array_map( 'trim', explode( ',', (string) $opts['notify_email'] ) ) );
+	if ( ! $to ) {
+		$to = array( get_option( 'admin_email' ) );
+	}
 
 	/*
 	 * From must be an address the SENDER is authorised to use — which is not
@@ -198,26 +208,72 @@ function leadkit_notify( $post_id, $fields, $opts ) {
 		$fields['type'] ? ' (' . $fields['type'] . ')' : ''
 	);
 
-	$body = implode(
-		"\n",
-		array(
-			__( 'Name:', 'leadkit' ) . ' ' . $fields['name'],
-			__( 'Email:', 'leadkit' ) . ' ' . $fields['email'],
-			__( 'Phone:', 'leadkit' ) . ' ' . $fields['phone'],
-			__( 'Project:', 'leadkit' ) . ' ' . ( $fields['type'] ?: '—' ),
-			'',
-			__( 'Message:', 'leadkit' ),
-			$fields['message'],
-			'',
-			'— ' . home_url( '/' ),
-			admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
-		)
+	/*
+	 * HTML, with a plain-text alternative below it in the same body.
+	 *
+	 * The journey is the reason this email is worth reading — which page they
+	 * lingered on, which photographs they opened, whether they tapped the phone
+	 * number before writing. None of that survives as plain text, and a lead
+	 * notification that omits it is just a name and a number.
+	 */
+	$journey = leadkit_render_journey( (string) get_post_meta( $post_id, '_leadkit_analytics', true ) );
+	$ink     = '#1d2327';
+	$muted   = '#646970';
+	$line    = '#dcdcde';
+
+	$rows = array(
+		__( 'Name', 'leadkit' )    => esc_html( $fields['name'] ),
+		__( 'Email', 'leadkit' )   => '<a href="mailto:' . esc_attr( $fields['email'] ) . '" style="color:#2271b1">' . esc_html( $fields['email'] ) . '</a>',
+		__( 'Phone', 'leadkit' )   => $fields['phone'] ? '<a href="tel:' . esc_attr( preg_replace( '/[^0-9+]/', '', $fields['phone'] ) ) . '" style="color:#2271b1">' . esc_html( $fields['phone'] ) . '</a>' : '&mdash;',
+		__( 'Project', 'leadkit' ) => esc_html( $fields['type'] ?: '—' ),
 	);
+
+	$body = '<div style="background:#f0f0f1;padding:20px 0;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif">'
+		. '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:640px;margin:0 auto;background:#fff;border:1px solid ' . $line . ';border-collapse:collapse">'
+		. '<tr><td style="padding:22px 24px 0">'
+			. '<div style="font-size:19px;font-weight:700;color:' . $ink . '">' . esc_html__( 'New enquiry', 'leadkit' ) . '</div>'
+			. '<div style="height:3px;background:' . $ink . ';margin:10px 0 0;width:56px"></div>'
+		. '</td></tr>'
+		. '<tr><td style="padding:18px 24px 0">'
+			. '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;font-size:14px">';
+
+	foreach ( $rows as $label => $value ) {
+		$body .= '<tr>'
+			. '<td width="90" style="padding:5px 0;color:' . $muted . ';vertical-align:top">' . esc_html( $label ) . '</td>'
+			. '<td style="padding:5px 0;color:' . $ink . '">' . $value . '</td>'
+			. '</tr>';
+	}
+
+	$body .= '</table></td></tr>'
+		. '<tr><td style="padding:16px 24px 0">'
+			. '<div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:' . $muted . ';padding:0 0 6px">' . esc_html__( 'What they wrote', 'leadkit' ) . '</div>'
+			. '<div style="background:#f6f7f7;border-left:4px solid ' . $ink . ';padding:11px 13px;font-size:14px;line-height:1.6;color:' . $ink . ';white-space:pre-wrap">'
+			. esc_html( $fields['message'] ) . '</div>'
+		. '</td></tr>';
+
+	if ( $journey ) {
+		$body .= '<tr><td style="padding:20px 24px 0">'
+			. '<div style="border-top:1px solid ' . $line . ';padding:16px 0 0">'
+			. '<div style="font-size:16px;font-weight:700;color:' . $ink . ';padding:0 0 12px">' . esc_html__( 'How they got here', 'leadkit' ) . '</div>'
+			. $journey
+			. '</div></td></tr>';
+	}
+
+	$body .= '<tr><td style="padding:18px 24px 22px">'
+			. '<a href="' . esc_url( admin_url( 'post.php?post=' . $post_id . '&action=edit' ) ) . '" '
+			. 'style="display:inline-block;background:' . $ink . ';color:#fff;text-decoration:none;padding:10px 16px;font-size:14px;border-radius:3px">'
+			. esc_html__( 'Open this lead', 'leadkit' ) . '</a>'
+			. '<div style="font-size:12px;color:' . $muted . ';padding:12px 0 0">'
+			. esc_html__( 'Reply to this email and it goes straight to them.', 'leadkit' ) . ' &middot; '
+			. esc_html( (string) wp_parse_url( home_url(), PHP_URL_HOST ) )
+			. '</div>'
+		. '</td></tr>'
+		. '</table></div>';
 
 	$headers = array(
 		'From: ' . $from_name . ' <' . $from . '>',
 		'Reply-To: ' . $fields['name'] . ' <' . $fields['email'] . '>',
-		'Content-Type: text/plain; charset=UTF-8',
+		'Content-Type: text/html; charset=UTF-8',
 	);
 
 	/*
