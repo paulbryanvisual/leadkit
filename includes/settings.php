@@ -94,6 +94,7 @@ add_action(
 						 */
 						'turnstile_secret'    => leadkit_keep_secret( $raw['turnstile_secret'] ?? '', 'turnstile_secret' ),
 						'resend_api_key'      => leadkit_keep_secret( $raw['resend_api_key'] ?? '', 'resend_api_key' ),
+						'github_token'        => leadkit_keep_secret( $raw['github_token'] ?? '', 'github_token' ),
 						'turnstile_actions'   => sanitize_text_field( $raw['turnstile_actions'] ?? '' ),
 						'turnstile_hostnames' => sanitize_text_field( $raw['turnstile_hostnames'] ?? '' ),
 						'turnstile_fail_open' => empty( $raw['turnstile_fail_open'] ) ? '' : '1',
@@ -130,6 +131,7 @@ function leadkit_render_settings_page() {
 		'turnstile_actions'   => array( __( 'Accepted Turnstile actions', 'leadkit' ), __( 'Comma-separated. Must match the data-action on your widgets. A token minted for a different action is refused. Empty falls back to leadkit-form.', 'leadkit' ) ),
 		'turnstile_hostnames' => array( __( 'Extra Turnstile hostnames', 'leadkit' ), __( 'Comma-separated, ADDED to this site’s own hostname, which is always accepted. Only add hosts you serve the form from. Never add localhost here on a production site — a token solved anywhere would then be accepted, which is the check gone.', 'leadkit' ) ),
 		'turnstile_fail_open' => array( __( 'Accept if Cloudflare is unreachable', 'leadkit' ), __( 'Off (recommended): a submission is refused when Turnstile cannot be reached. On: it is accepted unverified — fewer lost enquiries during a Cloudflare outage, but an attacker who can block that call turns the check off.', 'leadkit' ), 'checkbox' ),
+		'github_token'      => array( __( 'GitHub token (for plugin updates)', 'leadkit' ), __( 'Only needed while the repository is private. A classic token with the “repo” scope lets this plugin offer its own updates under Dashboard → Updates. Leave empty if the repository is public. Never shown again once saved; a single - clears it.', 'leadkit' ), 'secret' ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
 	?>

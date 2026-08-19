@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -66,6 +66,14 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.2.0 =
+* Block: "Lead form" can now be placed from the editor, with the heading,
+  project types, labels and button text as block settings. The editor preview is
+  the real rendered form, not a mock-up of one.
+* The plugin updates itself from its own repository — new versions appear under
+  Dashboard → Updates like any other plugin. Add a GitHub token in settings only
+  while the repository is private.
 
 = 1.1.0 =
 * Submissions are handled by the plugin. LeadKit previously POSTed to an endpoint

@@ -1,0 +1,25 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "leadkit/form",
+	"title": "Lead form",
+	"category": "widgets",
+	"icon": "email-alt",
+	"description": "The lead-capture form. Submissions are saved under Leads and emailed on.",
+	"keywords": [ "contact", "form", "lead", "enquiry", "inquiry" ],
+	"textdomain": "leadkit",
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ],
+		"spacing": { "margin": true, "padding": true }
+	},
+	"attributes": {
+		"heading":       { "type": "string", "default": "" },
+		"projectTypes":  { "type": "string", "default": "" },
+		"submitText":    { "type": "string", "default": "Send" },
+		"messageLabel":  { "type": "string", "default": "Project details" },
+		"classPrefix":   { "type": "string", "default": "" }
+	},
+	"editorScript": "file:./index.js",
+	"render": "file:./render.php"
+}
