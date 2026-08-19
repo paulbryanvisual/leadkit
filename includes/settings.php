@@ -42,6 +42,8 @@ add_action(
 						'turnstile_sitekey' => sanitize_text_field( $raw['turnstile_sitekey'] ?? '' ),
 						'turnstile_secret'  => sanitize_text_field( $raw['turnstile_secret'] ?? '' ),
 						'notify_email'      => sanitize_email( $raw['notify_email'] ?? '' ),
+						'from_email'        => sanitize_email( $raw['from_email'] ?? '' ),
+						'from_name'         => sanitize_text_field( $raw['from_name'] ?? '' ),
 						'storage_prefix'    => preg_replace( '/[^a-zA-Z0-9_]/', '', $raw['storage_prefix'] ?? 'leadkit' ) ?: 'leadkit',
 					);
 				},
@@ -60,6 +62,8 @@ function leadkit_render_settings_page() {
 
 	$opts   = leadkit_options();
 	$fields = array(
+		'from_email'        => array( __( 'Send FROM this address', 'leadkit' ), __( 'Must be on a domain verified with your mail provider — not necessarily this site’s domain. An address on a domain with no SPF is what spam looks like, and it will be filtered.', 'leadkit' ) ),
+		'from_name'         => array( __( 'Send FROM this name', 'leadkit' ), __( 'The sender name recipients see. Defaults to the site title.', 'leadkit' ) ),
 		'notify_email'      => array( __( 'Send leads to', 'leadkit' ), __( 'Where each enquiry is emailed. Empty uses the site admin address. Every lead is saved under Leads either way, so a mail problem never loses one.', 'leadkit' ) ),
 		'submit_url'        => array( __( 'Form submit endpoint', 'leadkit' ), __( 'Leave EMPTY to use this plugin’s own endpoint, which is what almost every site wants. Only set this if you have your own service handling submissions.', 'leadkit' ) ),
 		'sync_url'          => array( __( 'Tracker sync endpoint', 'leadkit' ), __( 'Receives background analytics for known leads (JSON).', 'leadkit' ) ),

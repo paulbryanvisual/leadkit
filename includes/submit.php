@@ -114,9 +114,10 @@ function leadkit_handle_submit( $req ) {
 	}
 
 	// Turnstile, only when a secret is configured. A site key alone verifies nothing.
-	if ( ! empty( $opts['turnstile_secret'] ) ) {
+	$turnstile_secret = leadkit_turnstile_secret();
+	if ( '' !== $turnstile_secret ) {
 		$token = (string) $req->get_param( 'cf-turnstile-response' );
-		if ( ! leadkit_verify_turnstile( $token, $opts['turnstile_secret'], $ip ) ) {
+		if ( ! leadkit_verify_turnstile( $token, $turnstile_secret, $ip ) ) {
 			return leadkit_answer( $req, false, __( 'Could not verify that you are human. Please try again.', 'leadkit' ), $referer );
 		}
 	}
@@ -173,15 +174,23 @@ function leadkit_notify( $post_id, $fields, $opts ) {
 	$to = ! empty( $opts['notify_email'] ) ? $opts['notify_email'] : get_option( 'admin_email' );
 
 	/*
-	 * From MUST be on this site's own domain. A shared host will refuse to
-	 * relay — or a receiving server will bin — a message claiming to come from
-	 * an address the sending host has no authority over, which is exactly what
-	 * "From: the visitor's gmail" does. The visitor's address goes in
-	 * Reply-To, where hitting Reply still reaches them.
+	 * From must be an address the SENDER is authorised to use — which is not
+	 * the same as "this site's domain", and assuming it was is how the first
+	 * version of this got it wrong. rogerenglandhomeremodeling.com has no SPF,
+	 * no DKIM and no DMARC, so `wordpress@` there is precisely the shape of a
+	 * forgery and Gmail treats it accordingly.
+	 *
+	 * So it is configurable, and falls back to the site domain only because
+	 * something has to be there. Set it to an address on the domain verified
+	 * with your mail provider (Settings → LeadKit).
+	 *
+	 * The visitor's own address never goes here. It goes in Reply-To, where
+	 * hitting Reply still reaches them and no authentication check is failed.
 	 */
-	$host   = wp_parse_url( home_url(), PHP_URL_HOST );
-	$host   = preg_replace( '/^www\./', '', (string) $host );
-	$from   = 'wordpress@' . $host;
+	$host = wp_parse_url( home_url(), PHP_URL_HOST );
+	$host = preg_replace( '/^www\./', '', (string) $host );
+	$from = $opts['from_email'] ?: 'wordpress@' . $host;
+	$from_name = $opts['from_name'] ?: get_bloginfo( 'name' );
 	$subject = sprintf(
 		/* translators: 1: visitor name, 2: project type */
 		__( 'New enquiry — %1$s%2$s', 'leadkit' ),
@@ -206,7 +215,7 @@ function leadkit_notify( $post_id, $fields, $opts ) {
 	);
 
 	$headers = array(
-		'From: ' . get_bloginfo( 'name' ) . ' <' . $from . '>',
+		'From: ' . $from_name . ' <' . $from . '>',
 		'Reply-To: ' . $fields['name'] . ' <' . $fields['email'] . '>',
 		'Content-Type: text/plain; charset=UTF-8',
 	);

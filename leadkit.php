@@ -33,6 +33,7 @@ define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
 require_once LEADKIT_DIR . '/includes/form.php';
 require_once LEADKIT_DIR . '/includes/settings.php';
+require_once LEADKIT_DIR . '/includes/mailer.php';
 require_once LEADKIT_DIR . '/includes/leads.php';
 require_once LEADKIT_DIR . '/includes/submit.php';
 
@@ -51,6 +52,8 @@ function leadkit_options() {
 		'turnstile_sitekey' => '',
 		'turnstile_secret'  => '',
 		'notify_email'      => '',
+		'from_email'        => '',
+		'from_name'         => '',
 		'storage_prefix'    => 'leadkit',
 	);
 
