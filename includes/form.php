@@ -124,7 +124,51 @@ function leadkit_form( $args = array(), $output = true ) {
 
 	ob_start();
 	?>
+<?php
+	/*
+	 * The answer to a no-JavaScript submit. The endpoint redirects back here
+	 * with ?leadkit=sent|error, so the visitor sees a result on the page they
+	 * started from rather than a screenful of JSON.
+	 */
+	$leadkit_result = isset( $_GET['leadkit'] ) ? sanitize_key( wp_unslash( $_GET['leadkit'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	$leadkit_which  = isset( $_GET['leadkit_form'] ) ? sanitize_key( wp_unslash( $_GET['leadkit_form'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+	/*
+	 * The banner belongs to the form that was submitted, and to no other. Each
+	 * form posts its own prefix and the endpoint hands it back.
+	 *
+	 * Deciding by ORDER instead — "first form rendered wins the id" — looked
+	 * obvious and was wrong. A shortcode inside post content runs whenever
+	 * anything reads that content, and the SEO meta description reads it before
+	 * the page is built, so the first render is one whose output is discarded
+	 * and the id went to nobody. Identity is stable; call order is not.
+	 */
+	if ( ( 'sent' === $leadkit_result || 'error' === $leadkit_result )
+		&& $leadkit_which === sanitize_key( $p ) ) :
+		?>
+<?php
+		?>
+<div id="leadkit-message" class="<?= esc_attr( $p ) ?>__message <?= esc_attr( $p ) ?>__message--<?= esc_attr( $leadkit_result ) ?>" role="status">
+	<?= esc_html(
+		'sent' === $leadkit_result
+			? __( 'Thank you — we will be in touch shortly.', 'leadkit' )
+			: __( 'Sorry, that did not send. Please try again, or call us.', 'leadkit' )
+	) ?>
+</div>
+	<?php endif; ?>
 <form class="<?= esc_attr( $form_class ) ?>" action="<?= esc_url( $args['submit_url'] ) ?>" method="POST" data-leadkit>
+	<?php
+	/*
+	 * The honeypot. Hidden from people by position rather than by
+	 * `display:none`, which the better bots check for, and marked
+	 * aria-hidden + tabindex="-1" so it is skipped by assistive tech and by
+	 * the tab order. A person never fills it; a bot fills everything.
+	 */
+	?>
+	<div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">
+		<label>Leave this empty<input type="text" name="leadkit_hp" tabindex="-1" autocomplete="off" value=""></label>
+	</div>
+	<input type="hidden" name="leadkit_form" value="<?= esc_attr( sanitize_key( $p ) ) ?>">
 	<?php if ( ! $args['project_types'] ) : ?>
 	<input type="hidden" name="projectType" value="<?= esc_attr( $args['project_type'] ) ?>">
 	<?php endif; ?>

@@ -40,6 +40,8 @@ add_action(
 						'sync_url'          => sanitize_text_field( $raw['sync_url'] ?? '' ),
 						'track_url'         => sanitize_text_field( $raw['track_url'] ?? '' ),
 						'turnstile_sitekey' => sanitize_text_field( $raw['turnstile_sitekey'] ?? '' ),
+						'turnstile_secret'  => sanitize_text_field( $raw['turnstile_secret'] ?? '' ),
+						'notify_email'      => sanitize_email( $raw['notify_email'] ?? '' ),
 						'storage_prefix'    => preg_replace( '/[^a-zA-Z0-9_]/', '', $raw['storage_prefix'] ?? 'leadkit' ) ?: 'leadkit',
 					);
 				},
@@ -58,10 +60,12 @@ function leadkit_render_settings_page() {
 
 	$opts   = leadkit_options();
 	$fields = array(
-		'submit_url'        => array( __( 'Form submit endpoint', 'leadkit' ), __( 'The URL the lead form POSTs to. Relative (/api/submit) or absolute.', 'leadkit' ) ),
+		'notify_email'      => array( __( 'Send leads to', 'leadkit' ), __( 'Where each enquiry is emailed. Empty uses the site admin address. Every lead is saved under Leads either way, so a mail problem never loses one.', 'leadkit' ) ),
+		'submit_url'        => array( __( 'Form submit endpoint', 'leadkit' ), __( 'Leave EMPTY to use this plugin’s own endpoint, which is what almost every site wants. Only set this if you have your own service handling submissions.', 'leadkit' ) ),
 		'sync_url'          => array( __( 'Tracker sync endpoint', 'leadkit' ), __( 'Receives background analytics for known leads (JSON).', 'leadkit' ) ),
 		'track_url'         => array( __( 'Interaction endpoint', 'leadkit' ), __( 'Receives the first phone/email click with full session context (JSON).', 'leadkit' ) ),
-		'turnstile_sitekey' => array( __( 'Turnstile site key', 'leadkit' ), __( 'Leave empty to render the form without bot protection. Cloudflare’s testing key 1x00000000000000000000AA renders a dummy widget on any domain.', 'leadkit' ) ),
+		'turnstile_sitekey' => array( __( 'Turnstile site key', 'leadkit' ), __( 'Leave empty to render the form without bot protection. Cloudflare’s testing key 1x00000000000000000000AA renders a dummy widget on any domain and ALWAYS passes — it protects nothing.', 'leadkit' ) ),
+		'turnstile_secret'  => array( __( 'Turnstile secret key', 'leadkit' ), __( 'Required for the check to mean anything. Without it the widget is decorative: the site key renders it, the secret is what verifies it server-side.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
 	?>

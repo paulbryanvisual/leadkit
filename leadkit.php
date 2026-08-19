@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan Visual
@@ -13,23 +13,28 @@
  *
  * @package LeadKit
  *
- * The server side is NOT in this plugin: submissions POST to an endpoint you
- * configure (Settings → LeadKit). The reference implementation is a set of
- * Cloudflare Pages Functions — /api/submit (form + Turnstile verify),
- * /api/sync-lead and /api/track-interaction (tracker) — see readme.txt for the
- * exact payload contract so new projects can stand up compatible endpoints.
+ * The server side IS in this plugin as of 1.1.0: submissions go to the REST
+ * route leadkit/v1/submit, which validates, stores the lead as a `leadkit_lead`
+ * post and emails it on. Leaving it out was a real failure — the form pointed at
+ * a Cloudflare Pages Function, the site moved hosts, /api/submit became a 404,
+ * and every enquiry was lost with no error anywhere.
+ *
+ * `submit_url` remains configurable for sites that genuinely have their own
+ * endpoint; left empty it uses the built-in route, which is the default.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.0.0' );
+define( 'LEADKIT_VERSION', '1.1.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
 require_once LEADKIT_DIR . '/includes/form.php';
 require_once LEADKIT_DIR . '/includes/settings.php';
+require_once LEADKIT_DIR . '/includes/leads.php';
+require_once LEADKIT_DIR . '/includes/submit.php';
 
 /**
  * One option, one array — portable and easy to export between installs.
@@ -38,16 +43,30 @@ require_once LEADKIT_DIR . '/includes/settings.php';
  */
 function leadkit_options() {
 	$defaults = array(
-		'submit_url'        => '/api/submit',
+		// Empty means "use the route this plugin registers" — resolved below,
+		// so the default is correct on any host without anyone configuring it.
+		'submit_url'        => '',
 		'sync_url'          => '/api/sync-lead',
 		'track_url'         => '/api/track-interaction',
 		'turnstile_sitekey' => '',
+		'turnstile_secret'  => '',
+		'notify_email'      => '',
 		'storage_prefix'    => 'leadkit',
 	);
 
 	$opts = get_option( 'leadkit_options', array() );
+	$opts = wp_parse_args( is_array( $opts ) ? $opts : array(), $defaults );
 
-	return wp_parse_args( is_array( $opts ) ? $opts : array(), $defaults );
+	/*
+	 * `/api/submit` is the Cloudflare-era value. It is a 404 on any other host,
+	 * and it is what silently broke the form on migration — so treat it as
+	 * unset rather than honouring a URL that cannot work here.
+	 */
+	if ( '' === $opts['submit_url'] || '/api/submit' === $opts['submit_url'] ) {
+		$opts['submit_url'] = leadkit_submit_endpoint();
+	}
+
+	return $opts;
 }
 
 /**
