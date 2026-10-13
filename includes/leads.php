@@ -167,6 +167,7 @@ add_action(
 					__( 'Page', 'leadkit' )    => get_post_meta( $post->ID, '_leadkit_source_url', true ),
 					__( 'IP', 'leadkit' )      => get_post_meta( $post->ID, '_leadkit_ip', true ),
 					__( 'Campaign', 'leadkit' ) => get_post_meta( $post->ID, '_leadkit_utm_packed', true ),
+					__( 'Campaign history', 'leadkit' ) => get_post_meta( $post->ID, '_leadkit_utm_history', true ),
 					__( 'First came from', 'leadkit' ) => leadkit_pack_campaign( array(
 						'medium'   => get_post_meta( $post->ID, '_leadkit_utm_first_medium', true ),
 						'source'   => get_post_meta( $post->ID, '_leadkit_utm_first_source', true ),

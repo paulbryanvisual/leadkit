@@ -42,7 +42,7 @@ require_once LEADKIT_DIR . '/includes/submit.php';
 /**
  * One option, one array — portable and easy to export between installs.
  *
- * @return array{submit_url:string,sync_url:string,track_url:string,turnstile_sitekey:string,storage_prefix:string,donation_hosts:string,attribution_days:string}
+ * @return array{submit_url:string,sync_url:string,track_url:string,turnstile_sitekey:string,storage_prefix:string,donation_hosts:string,attribution_days:string,form_hosts:string,history_param:string}
  */
 function leadkit_options() {
 	$defaults = array(
@@ -63,6 +63,8 @@ function leadkit_options() {
 		'storage_prefix'    => 'leadkit',
 		'donation_hosts'    => 'givelively.org',
 		'attribution_days'  => '0',
+		'form_hosts'        => 'forms.monday.com, wkf.ms',
+		'history_param'     => 'campaign_history',
 	);
 
 	$opts = get_option( 'leadkit_options', array() );
@@ -147,6 +149,8 @@ add_action(
 					'storagePrefix'   => $opts['storage_prefix'],
 					'donationHosts'   => array_values( array_filter( array_map( 'trim', explode( ',', (string) $opts['donation_hosts'] ) ) ) ),
 					'attributionDays' => max( 0, (int) $opts['attribution_days'] ),
+					'formHosts'       => array_values( array_filter( array_map( 'trim', explode( ',', (string) $opts['form_hosts'] ) ) ) ),
+					'historyParam'    => (string) $opts['history_param'],
 				)
 			) . ';',
 			'before'

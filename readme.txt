@@ -68,6 +68,10 @@ campaign credited when the visitor came back from the donation host).
   which is useful for local layout parity.
 * Donation hosts — comma-separated domains whose links get the visitor's
   campaign (default givelively.org; subdomains match). Empty turns it off.
+* Form hosts — comma-separated domains of outside forms that take hidden
+  fields (default forms.monday.com, wkf.ms). They get utm_source … utm_term
+  plus the campaign history parameter.
+* History parameter — name of that parameter (default campaign_history).
 * Campaign credit (days) — how long the latest campaign keeps the credit.
   0 (default) = for as long as the visitor's browser keeps the data.
 * Storage prefix for the localStorage keys, in case two projects share a
@@ -86,6 +90,8 @@ moving an existing site onto the plugin needs no re-typing.
   1.2.x sessions are migrated.
 * Donation links (Give Lively by default) carry the visitor's campaign packed
   into utm_source, the one field Give Lively keeps.
+* Outside forms (monday.com by default) get the UTM fields and the full
+  campaign history, oldest first, as campaign_history.
 * Returns from the donation form are logged with their campaign.
 * Leads list has a Campaign column; campaign fields are stored as lead meta and
   shown in the notification email.

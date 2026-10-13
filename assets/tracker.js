@@ -8,7 +8,8 @@
  * is sent for anonymous visitors except that first identifying interaction.
  *
  * Configuration arrives via window.LeadKitCfg (printed by the plugin):
- *   { submitAction, syncUrl, trackUrl, storagePrefix, donationHosts, attributionDays }
+ *   { submitAction, syncUrl, trackUrl, storagePrefix, donationHosts, attributionDays,
+ *     formHosts, historyParam }
  *
  * Campaigns: all five UTM fields are captured on every landing, the latest one
  * keeps the credit until a newer one arrives (or for attributionDays, when a
@@ -38,6 +39,14 @@
 	// 0 = no expiry: the latest campaign keeps the credit for as long as the
 	// browser keeps the data. A positive number is a window in days.
 	var ATTRIBUTION_DAYS = parseInt( cfg.attributionDays, 10 ) > 0 ? parseInt( cfg.attributionDays, 10 ) : 0;
+	var HISTORY_SEP = ' > ';
+	var HISTORY_MAX = 1500;
+	var HISTORY_PARAM = typeof cfg.historyParam === 'string' ? cfg.historyParam : 'campaign_history';
+	var FORM_HOSTS = ( Array.isArray( cfg.formHosts ) ? cfg.formHosts : [ 'forms.monday.com', 'wkf.ms' ] )
+		.map( function ( h ) {
+			return String( h ).trim().toLowerCase().replace( /^https?:\/\//, '' ).replace( /\/.*$/, '' );
+		} )
+		.filter( Boolean );
 	var DONATION_HOSTS = ( Array.isArray( cfg.donationHosts ) ? cfg.donationHosts : [ 'givelively.org' ] )
 		.map( function ( h ) {
 			return String( h ).trim().toLowerCase().replace( /^https?:\/\//, '' ).replace( /\/.*$/, '' );
@@ -307,6 +316,10 @@
 				parts = [ 'direct', 'website' ];
 			}
 
+			return this.packParts( parts );
+		}
+
+		packParts( parts ) {
 			parts = parts.map( function ( p ) {
 				return String( p || '' )
 					.toLowerCase()
@@ -322,10 +335,50 @@
 				.join( PACK_SEP );
 		}
 
-		isDonationUrl( url ) {
-			return DONATION_HOSTS.some( function ( h ) {
+		/**
+		 * Every campaign this visitor has arrived from, oldest first, in one
+		 * string — for a single form field a report can filter on ("contains
+		 * light-the-path") or read as the visitor's path:
+		 *
+		 *   email__mailchimp__light-the-path__email-1 > social__instagram__light-the-path__post-3
+		 *
+		 * Each touch is packed exactly as utm_source is for Give Lively, so the
+		 * same split works on both. URLs have practical length limits, so past
+		 * HISTORY_MAX characters the oldest middle touches give way to "…" —
+		 * the first touch and the most recent ones always stay.
+		 */
+		historyString() {
+			var self = this;
+			var touches = ( this.data.utm_touches || [] ).filter( function ( t ) {
+				return self.hasCampaign( t );
+			} );
+			var packed = touches.map( function ( t ) {
+				return self.packParts( [ t.medium, t.source, t.campaign, t.content, t.term ] );
+			} );
+
+			var out = packed.join( HISTORY_SEP );
+			if ( out.length <= HISTORY_MAX ) return out;
+
+			var head = packed[ 0 ];
+			var tail = packed.slice( 1 );
+			while ( tail.length > 1 && ( head + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP ) ).length > HISTORY_MAX ) {
+				tail.shift();
+			}
+			return head + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP );
+		}
+
+		matchesHost( url, hosts ) {
+			return hosts.some( function ( h ) {
 				return url.hostname === h || url.hostname.slice( -( h.length + 1 ) ) === '.' + h;
 			} );
+		}
+
+		isFormUrl( url ) {
+			return this.matchesHost( url, FORM_HOSTS );
+		}
+
+		isDonationUrl( url ) {
+			return this.matchesHost( url, DONATION_HOSTS );
 		}
 
 		/**
@@ -345,8 +398,35 @@
 			} catch ( e ) {
 				return null;
 			}
-			if ( ! this.isDonationUrl( url ) ) return null;
+			if ( this.isDonationUrl( url ) ) return this.decorateDonationUrl( url );
+			if ( this.isFormUrl( url ) ) return this.decorateFormUrl( url );
+			return null;
+		}
 
+		/**
+		 * A form that takes hidden fields (monday.com WorkForms by default):
+		 * the five UTM fields of the campaign with the credit, each in its own
+		 * parameter, plus the whole history in one. On a monday.com form each
+		 * parameter becomes a column through a form tag of the same name.
+		 */
+		decorateFormUrl( url ) {
+			var t = this.attribution();
+			var hist = this.historyString();
+			if ( ! t && ! hist ) return null;
+
+			var before = url.toString();
+			if ( t ) {
+				UTM_KEYS.forEach( function ( k ) {
+					if ( t[ k ] ) url.searchParams.set( 'utm_' + k, t[ k ] );
+				} );
+			}
+			if ( hist && HISTORY_PARAM ) url.searchParams.set( HISTORY_PARAM, hist );
+
+			var after = url.toString();
+			return after === before ? null : after;
+		}
+
+		decorateDonationUrl( url ) {
 			var t = this.attribution();
 			if ( ! t && url.searchParams.get( 'utm_source' ) ) return null;
 
@@ -390,7 +470,7 @@
 			} );
 
 			// A new src reloads the frame — only worth it for a real campaign.
-			if ( ! self.attribution() ) return;
+			if ( ! self.attribution() && ! self.historyString() ) return;
 			root.querySelectorAll( 'iframe[src]' ).forEach( function ( f ) {
 				if ( f.hasAttribute( 'data-leadkit-keep' ) ) return;
 				var next = self.decorateUrl( f.getAttribute( 'src' ) );

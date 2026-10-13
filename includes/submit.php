@@ -524,6 +524,31 @@ function leadkit_store_campaign( $post_id, $analytics ) {
 	if ( '' !== $packed ) {
 		update_post_meta( $post_id, '_leadkit_utm_packed', $packed );
 	}
+
+	$history = leadkit_campaign_history( is_array( $analytics['utm_touches'] ?? null ) ? $analytics['utm_touches'] : array() );
+	if ( '' !== $history ) {
+		update_post_meta( $post_id, '_leadkit_utm_history', $history );
+	}
+}
+
+/**
+ * Every campaign touch, oldest first, joined with " > " — the same string the
+ * tracker sends to outside forms as campaign_history, so form leads and
+ * monday.com submissions can be reported on the same way. Not length-capped
+ * here: post meta has room the URL does not.
+ *
+ * @param array $touches utm_touches from the analytics.
+ * @return string
+ */
+function leadkit_campaign_history( $touches ) {
+	$out = array();
+	foreach ( $touches as $t ) {
+		$p = is_array( $t ) ? leadkit_pack_campaign( $t ) : '';
+		if ( '' !== $p ) {
+			$out[] = $p;
+		}
+	}
+	return implode( ' > ', $out );
 }
 
 /**

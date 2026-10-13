@@ -27,6 +27,14 @@ field, `utm_source`, and drops the rest.
   (`data-widget-src`) and donation iframes are covered too. With no campaign
   the source still says something: `organic__google.com`, `referral__<host>`
   or `direct__website`. Opt a link out with `data-leadkit-keep`.
+- **Outside forms get the whole history.** Links and embeds to form hosts
+  (`forms.monday.com` and `wkf.ms` by default; Settings → LeadKit → Form
+  hosts) get the five UTM fields of the campaign with the credit, plus
+  `campaign_history`: every campaign touch, oldest first, each packed as above,
+  joined with ` > `. On a monday.com WorkForm, a form tag with each parameter's
+  name captures it as a column. Past 1,500 characters the oldest middle
+  touches give way to `…`; the first and most recent stay. LeadKit's own leads
+  store the same string, uncapped, as `_leadkit_utm_history`.
 - **Donation returns are logged.** A page reached from the donation host (the
   thank-you redirect) records a `donation_return` event with the credited
   campaign and fires `leadkit:donation-return` on `document`.
