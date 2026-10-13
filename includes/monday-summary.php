@@ -183,7 +183,7 @@ function leadkit_journey_summary( $t, $analytics = array() ) {
 
 	$lines = array();
 	foreach ( $pages as $p ) {
-		$lines[] = ( $p['at'] ? wp_date( 'M j, g:i:s a T', $p['at'] ) . ' — ' : '' ) . leadkit_stop_label( $p );
+		$lines[] = ( $p['at'] ? leadkit_vdate( 'M j, g:i:s a T', $p['at'] ) . ' — ' : '' ) . leadkit_stop_label( $p );
 	}
 
 	return array(
@@ -232,20 +232,20 @@ function leadkit_journey_update_html( $s ) {
 	$day = '';
 	$open = false;
 	foreach ( $s['list'] as $p ) {
-		$d = $p['at'] ? wp_date( 'l, M j, Y', $p['at'] ) : __( 'Pages, in order', 'leadkit' );
+		$d = $p['at'] ? leadkit_vdate( 'l, M j, Y', $p['at'] ) : __( 'Pages, in order', 'leadkit' );
 		if ( $d !== $day ) {
 			$html .= ( $open ? '</ul>' : '' ) . '<p><strong>' . esc_html( $d ) . '</strong></p><ul>';
 			$day   = $d;
 			$open  = true;
 		}
-		$html .= '<li>' . ( $p['at'] ? esc_html( wp_date( 'g:i:s a', $p['at'] ) ) . ' — ' : '' )
+		$html .= '<li>' . ( $p['at'] ? esc_html( leadkit_vdate( 'g:i:s a', $p['at'] ) ) . ' — ' : '' )
 			. '<strong>' . esc_html( $p['label'] ) . '</strong> ' . esc_html( $p['path'] ) . ' — '
 			. esc_html( leadkit_secs_label( $p['secs'] ) )
 			. ( $p['visits'] > 1 ? ' over ' . (int) $p['visits'] . ' loads' : '' )
 			. ', read ' . ( $p['visits'] > 1 ? 'up to ' : '' ) . (int) $p['scroll'] . '%</li>';
 	}
 	$timed = (bool) array_filter( array_column( $s['list'], 'at' ) );
-	return $html . ( $open ? '</ul>' : '' ) . '<p><em>' . ( $timed ? 'Times are ' . esc_html( wp_date( 'T' ) ) . ', the site\'s time zone. ' : '' ) . '— LeadKit</em></p>';
+	return $html . ( $open ? '</ul>' : '' ) . '<p><em>' . ( $timed ? 'Times are ' . esc_html( leadkit_vtz_note() ) . '. ' : '' ) . '— LeadKit</em></p>';
 }
 
 /**

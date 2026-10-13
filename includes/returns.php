@@ -163,6 +163,13 @@ function leadkit_handle_sync( $req ) {
 		'monday'   => array(),
 	);
 
+	// Their time zone: as the browser reports it now, else as last seen.
+	$tz = leadkit_clean_tz( $body['timezone'] ?? '' ) ?: leadkit_clean_tz( $state['tz'] ?? '' );
+	if ( $tz ) {
+		$state['tz'] = $tz;
+	}
+	leadkit_use_visitor_tz( $tz );
+
 	// Merge: one entry per page load (by id), newest values win.
 	$incoming = is_array( $body['page_views'] ?? null ) ? array_slice( $body['page_views'], -LEADKIT_MAX_VIEWS ) : array();
 	$added    = 0;
@@ -205,7 +212,7 @@ function leadkit_handle_sync( $req ) {
 	$days         = leadkit_group_by_day( $return_views );
 	$after        = array_values( leadkit_group_by_day( $after_views ) );
 	$after        = $after ? array_merge( ...$after ) : array();
-	$today        = wp_date( 'Y-m-d' );
+	$today        = leadkit_vdate( 'Y-m-d' );
 	$came_back    = isset( $days[ $today ] );
 	$latest       = max( array_map( fn( $v ) => strtotime( $v['time'] ), $state['views'] ) );
 	$new_day_for = function ( $channel ) use ( &$state, $today ) {
@@ -227,7 +234,7 @@ function leadkit_handle_sync( $req ) {
 		update_post_meta( $post_id, '_leadkit_return_visits', wp_json_encode( $days ) );
 		update_post_meta( $post_id, '_leadkit_after_submit', wp_json_encode( $after ) );
 		if ( $days ) {
-			update_post_meta( $post_id, '_leadkit_last_seen', wp_date( 'Y-m-d', $latest ) );
+			update_post_meta( $post_id, '_leadkit_last_seen', leadkit_vdate( 'Y-m-d', $latest ) );
 		}
 	}
 	// Notifications are for comebacks only, never for the pages straight after submitting.
@@ -248,7 +255,7 @@ function leadkit_handle_sync( $req ) {
 			$pcols['returns'] => (string) count( $days ),
 		);
 		if ( $days ) {
-			$values[ $pcols['last'] ] = array( 'date' => wp_date( 'Y-m-d', $latest ) );
+			$values[ $pcols['last'] ] = array( 'date' => leadkit_vdate( 'Y-m-d', $latest ) );
 		}
 		$res = leadkit_monday(
 			'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
@@ -261,7 +268,7 @@ function leadkit_handle_sync( $req ) {
 				array(
 					'i'    => $person,
 					'body' => '<p><strong>' . esc_html__( 'Came back to the site', 'leadkit' ) . '</strong> — '
-						. esc_html( wp_date( 'M j, Y', strtotime( $today ) ) ) . ': ' . esc_html( leadkit_day_pages( $days[ $today ] ) ) . '</p>'
+						. esc_html( leadkit_vdate( 'M j, Y', strtotime( $today ) ) ) . ': ' . esc_html( leadkit_day_pages( $days[ $today ] ) ) . '</p>'
 						. '<p>' . esc_html__( 'The full log is in the "Return visits log" column. — LeadKit', 'leadkit' ) . '</p>',
 				)
 			);
@@ -283,7 +290,7 @@ function leadkit_handle_sync( $req ) {
 					$cols['count'] => (string) count( $days ),
 				);
 				if ( $days ) {
-					$values[ $cols['seen'] ] = array( 'date' => wp_date( 'Y-m-d', $latest ) );
+					$values[ $cols['seen'] ] = array( 'date' => leadkit_vdate( 'Y-m-d', $latest ) );
 				}
 				$res = leadkit_monday(
 					'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
@@ -295,7 +302,7 @@ function leadkit_handle_sync( $req ) {
 				if ( $res && $came_back && $new_day_for( $channel ) ) {
 					$day  = $days[ $today ];
 					$note = '<p><strong>' . esc_html__( 'Came back to the site', 'leadkit' ) . '</strong> — '
-						. esc_html( wp_date( 'M j, Y', strtotime( $today ) ) ) . ': '
+						. esc_html( leadkit_vdate( 'M j, Y', strtotime( $today ) ) ) . ': '
 						. esc_html( leadkit_day_pages( $day ) ) . '</p>'
 						. '<p>' . esc_html__( 'The full log is in the "Return visits log" column. — LeadKit', 'leadkit' ) . '</p>';
 					leadkit_monday(
@@ -332,7 +339,7 @@ function leadkit_group_by_day( $views ) {
 	uasort( $views, fn( $a, $b ) => strcmp( $a['time'], $b['time'] ) );
 	$days = array();
 	foreach ( $views as $v ) {
-		$days[ wp_date( 'Y-m-d', strtotime( $v['time'] ) ) ][] = $v;
+		$days[ leadkit_vdate( 'Y-m-d', strtotime( $v['time'] ) ) ][] = $v;
 	}
 	return array_slice( $days, -LEADKIT_LOG_MAX_DAYS, null, true );
 }
@@ -347,7 +354,7 @@ function leadkit_day_pages( $day ) {
 	return implode(
 		' > ',
 		array_map(
-			fn( $v ) => wp_date( 'g:ia', strtotime( $v['time'] ) ) . ' ' . $v['path'] . ' ' . round( $v['ms'] / 1000 ) . 's ' . $v['scroll'] . '%',
+			fn( $v ) => leadkit_vdate( 'g:ia', strtotime( $v['time'] ) ) . ' ' . $v['path'] . ' ' . round( $v['ms'] / 1000 ) . 's ' . $v['scroll'] . '%',
 			(array) $day
 		)
 	);
@@ -363,14 +370,14 @@ function leadkit_days_text( $days, $after = array() ) {
 	$lines = array();
 	foreach ( array_reverse( $days, true ) as $date => $day ) {
 		$ms      = array_sum( array_column( $day, 'ms' ) );
-		$lines[] = wp_date( 'M j, Y', strtotime( $date ) ) . ' — '
+		$lines[] = leadkit_vdate( 'M j, Y', strtotime( $date ) ) . ' — '
 			/* translators: %d: number of pages. */
 			. sprintf( _n( '%d page', '%d pages', count( $day ), 'leadkit' ), count( $day ) )
 			. ', ' . leadkit_duration( $ms ) . ': ' . leadkit_day_pages( $day );
 	}
 	if ( $after ) {
 		$ms      = array_sum( array_column( $after, 'ms' ) );
-		$lines[] = __( 'After submitting', 'leadkit' ) . ' (' . wp_date( 'M j, Y', strtotime( $after[0]['time'] ) ) . ') — '
+		$lines[] = __( 'After submitting', 'leadkit' ) . ' (' . leadkit_vdate( 'M j, Y', strtotime( $after[0]['time'] ) ) . ') — '
 			. sprintf( _n( '%d page', '%d pages', count( $after ), 'leadkit' ), count( $after ) )
 			. ', ' . leadkit_duration( $ms ) . ': ' . leadkit_day_pages( $after );
 	}

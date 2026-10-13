@@ -150,7 +150,7 @@ function leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visi
 	$links = array();
 	foreach ( $earlier as $it ) {
 		$links[] = '<li><a href="' . esc_url( $it['url'] ) . '">' . esc_html( $it['name'] ) . '</a> — '
-			. esc_html( wp_date( 'M j, Y g:i a', strtotime( (string) $it['created_at'] ) ) ) . '</li>';
+			. esc_html( leadkit_vdate( 'M j, Y g:i a', strtotime( (string) $it['created_at'] ) ) ) . '</li>';
 	}
 	leadkit_monday(
 		'mutation ($i: ID!, $body: String!) { create_update(item_id: $i, body: $body) { id } }',
@@ -167,7 +167,7 @@ function leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visi
 			array(
 				'i'    => (string) $it['id'],
 				'body' => '<p><strong>' . esc_html__( 'Submitted again', 'leadkit' ) . '</strong> — '
-					. esc_html( wp_date( 'M j, Y g:i a' ) ) . ': <a href="' . esc_url( $own_url ) . '">' . esc_html( $name ) . '</a> '
+					. esc_html( leadkit_vdate( 'M j, Y g:i a' ) ) . ': <a href="' . esc_url( $own_url ) . '">' . esc_html( $name ) . '</a> '
 					. esc_html__( '(same email address)', 'leadkit' ) . '</p>',
 			)
 		);

@@ -182,7 +182,7 @@ function leadkit_person_upsert( $args ) {
 	);
 	$person = $found['items_page_by_column_values']['items'][0] ?? null;
 
-	$today  = wp_date( 'Y-m-d' );
+	$today  = leadkit_vdate( 'Y-m-d' );
 	$level  = $args['summary']['level'] ?? '';
 	$source = $args['summary']['source'] ?? '';
 	$first  = $args['summary']['first'] ?? '';
@@ -273,7 +273,7 @@ function leadkit_person_upsert( $args ) {
 
 	// What happened, on the person.
 	$note = '<p><strong>' . esc_html( $is_new ? __( 'New person', 'leadkit' ) : __( 'New submission', 'leadkit' ) ) . '</strong> — '
-		. esc_html( $args['form'] ) . ', ' . esc_html( wp_date( 'M j, Y g:i a' ) ) . '</p>';
+		. esc_html( $args['form'] ) . ', ' . esc_html( leadkit_vdate( 'M j, Y g:i a' ) ) . '</p>';
 	if ( ! empty( $args['summary'] ) ) {
 		$note .= leadkit_journey_update_html( $args['summary'] );
 	}

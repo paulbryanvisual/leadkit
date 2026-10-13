@@ -460,6 +460,9 @@ function leadkit_handle_monday_form( $req ) {
 
 	// Tracking: each value to the text column titled the same, if the board has one.
 	$tracking = json_decode( (string) $req->get_param( 'tracking' ), true );
+	// Names, journey and dates in the visitor's own time zone.
+	$vtz = leadkit_clean_tz( is_array( $tracking ) ? ( $tracking['timezone'] ?? '' ) : '' );
+	leadkit_use_visitor_tz( $vtz );
 	$by_title = array();
 	foreach ( $def['columns'] as $cid => $c ) {
 		if ( in_array( $c['type'], array( 'text', 'long_text' ), true ) ) {
@@ -545,7 +548,7 @@ function leadkit_handle_monday_form( $req ) {
 		if ( $ncol ) {
 			$values[ $ncol['name'] ] = mb_substr( $item, 0, 255 );
 			$short    = trim( preg_replace( '/\s*\([^)]*\)\s*$/', '', $def['title'] ) ) ?: $def['title'];
-			$row_name = mb_substr( wp_date( 'M j, Y g:i a' ) . ' · ' . $short, 0, 255 );
+			$row_name = mb_substr( leadkit_vdate( 'M j, Y g:i a' ) . ' · ' . $short, 0, 255 );
 		}
 	}
 
@@ -580,6 +583,9 @@ function leadkit_handle_monday_form( $req ) {
 			$state = get_option( $key, array() );
 			$state = is_array( $state ) ? $state : array();
 			$state['monday'][ $board ] = array( 'items' => array( $item_id ), 'checked' => time() );
+			if ( $vtz ) {
+				$state['tz'] = $vtz;
+			}
 			update_option( $key, $state, false );
 		}
 

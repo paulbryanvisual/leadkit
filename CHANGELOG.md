@@ -2,6 +2,9 @@
 
 ## 1.3.1
 
+- Times follow the visitor's own time zone (sent by the tracker as
+  `timezone`): submission names, journeys, return-visit logs and dates in
+  monday.com. Falls back to the site's zone when a browser doesn't say.
 - With a People board, submissions are named by date and form
   ("Oct 12, 2026 9:58 pm · Volunteer Inquiry"), so a person's "Form
   submissions" list reads as a timeline; the name goes in a Name column.

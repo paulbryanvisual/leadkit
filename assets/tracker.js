@@ -182,12 +182,22 @@
 						page_views: views,
 						device: this.data.device,
 						utm: this.data.utm,
+						timezone: this.timeZone(),
 					} ),
 					keepalive: true,
 					credentials: 'omit',
 				} );
 			} catch ( e ) {
 				console.error( 'Analytics sync failed', e );
+			}
+		}
+
+		/** The browser's IANA time zone, or ''. */
+		timeZone() {
+			try {
+				return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+			} catch ( e ) {
+				return '';
 			}
 		}
 
@@ -498,6 +508,7 @@
 		 *   photos_viewed          distinct photographs opened
 		 *   device                 mobile / tablet / desktop and width
 		 *   first_visit            date of the first visit (YYYY-MM-DD)
+		 *   timezone               the browser's time zone, e.g. America/Chicago
 		 *   visitor_id             LeadKit's id, to join with lead records
 		 */
 		formParams( full ) {
@@ -563,6 +574,8 @@
 			out.device = ( w < 768 ? 'mobile' : w < 1100 ? 'tablet' : 'desktop' ) + ' ' + w + 'px';
 
 			if ( d.started_at ) out.first_visit = String( d.started_at ).slice( 0, 10 );
+			var tz = this.timeZone();
+			if ( tz ) out.timezone = tz;
 			if ( d.id ) out.visitor_id = d.id;
 
 			return out;

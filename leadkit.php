@@ -31,6 +31,7 @@ define( 'LEADKIT_VERSION', '1.3.1' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
+require_once LEADKIT_DIR . '/includes/timezone.php';
 require_once LEADKIT_DIR . '/includes/form.php';
 require_once LEADKIT_DIR . '/includes/settings.php';
 require_once LEADKIT_DIR . '/includes/mailer.php';
