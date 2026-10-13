@@ -37,7 +37,8 @@ field, `utm_source`, and drops the rest.
   store the same string, uncapped, as `_leadkit_utm_history`.
   Those forms also get the rest of what the tracker knows, each as its own
   parameter for a form tag to capture: `first_touch`, `landing_page`,
-  `referrer`, `click_id`, `form_page`, `pages_viewed`, `page_path`,
+  `referrer`, `click_id`, `form_page`, `pages_viewed`, `page_path`, `page_detail` (each page with its active
+  seconds and scroll depth, e.g. `/protect/ 45s 80%`),
   `time_on_site` (active seconds), `photos_viewed`, `device`, `first_visit`
   and `visitor_id` (LeadKit's id, to join with lead records).
 - **Donation returns are logged.** A page reached from the donation host (the

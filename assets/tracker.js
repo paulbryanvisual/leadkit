@@ -42,6 +42,7 @@
 	var HISTORY_SEP = ' > ';
 	var HISTORY_MAX = 1500;
 	var PATH_MAX = 600;
+	var DETAIL_MAX = 1000;
 	var HISTORY_PARAM = typeof cfg.historyParam === 'string' ? cfg.historyParam : 'campaign_history';
 	var FORM_HOSTS = ( Array.isArray( cfg.formHosts ) ? cfg.formHosts : [ 'forms.monday.com', 'wkf.ms' ] )
 		.map( function ( h ) {
@@ -425,6 +426,8 @@
 		 *   form_page              the page the form was opened from
 		 *   pages_viewed           pages seen, this one included
 		 *   page_path              those pages in order, " > "
+		 *   page_detail            each page with active seconds and how far
+		 *                          they scrolled: /protect/ 45s 80% > …
 		 *   time_on_site           active seconds across the visit
 		 *   photos_viewed          distinct photographs opened
 		 *   device                 mobile / tablet / desktop and width
@@ -454,26 +457,26 @@
 
 			out.form_page = window.location.pathname;
 
-			var views = ( d.page_views || [] ).slice();
-			var paths = views.map( function ( v ) {
-				return v.path;
-			} );
-			paths.push( window.location.pathname );
-			out.pages_viewed = String( paths.length );
-			var trail = paths.join( HISTORY_SEP );
-			if ( trail.length > PATH_MAX ) {
-				var tail = paths.slice( 1 );
-				while ( tail.length > 1 && ( paths[ 0 ] + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP ) ).length > PATH_MAX ) {
-					tail.shift();
-				}
-				trail = paths[ 0 ] + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP );
-			}
-			out.page_path = trail;
-
+			// Every page so far, plus this one as it stands right now.
 			this.updateActiveTime();
+			this.handleScroll();
+			var views = ( d.page_views || [] ).concat( [ {
+				path: window.location.pathname,
+				active_time_ms: this.pageActiveTimeMs,
+				max_scroll_percent: this.maxScroll,
+			} ] );
+
+			out.pages_viewed = String( views.length );
+			out.page_path = this.joinCapped( views.map( function ( v ) {
+				return v.path;
+			} ), PATH_MAX );
+			out.page_detail = this.joinCapped( views.map( function ( v ) {
+				return v.path + ' ' + Math.round( ( +v.active_time_ms || 0 ) / 1000 ) + 's ' + ( +v.max_scroll_percent || 0 ) + '%';
+			} ), DETAIL_MAX );
+
 			var ms = views.reduce( function ( sum, v ) {
 				return sum + ( +v.active_time_ms || 0 );
-			}, 0 ) + this.pageActiveTimeMs;
+			}, 0 );
 			out.time_on_site = String( Math.round( ms / 1000 ) );
 
 			var photos = ( d.photos_seen || [] ).length;
@@ -486,6 +489,21 @@
 			if ( d.id ) out.visitor_id = d.id;
 
 			return out;
+		}
+
+		/**
+		 * Join with " > ", keeping the first entry and as many of the most
+		 * recent as fit in max characters, with "…" where the middle was.
+		 */
+		joinCapped( parts, max ) {
+			var all = parts.join( HISTORY_SEP );
+			if ( all.length <= max || parts.length < 3 ) return all;
+			var tail = parts.slice( 1 );
+			var build = function () {
+				return parts[ 0 ] + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP );
+			};
+			while ( tail.length > 1 && build().length > max ) tail.shift();
+			return build();
 		}
 
 		decorateFormUrl( url ) {
