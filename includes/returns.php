@@ -240,39 +240,40 @@ function leadkit_handle_sync( $req ) {
 	$monday = array();
 	if ( leadkit_monday_token() ) {
 		foreach ( leadkit_monday_boards() as $board ) {
-			$item = leadkit_monday_find_item( $board, $visitor, $state );
-			if ( ! $item ) {
-				continue;
-			}
-			$cols = leadkit_monday_columns( $board );
+			$items = leadkit_monday_find_items( $board, $visitor, $state );
+			$cols  = $items ? leadkit_monday_columns( $board ) : null;
 			if ( ! $cols ) {
 				continue;
 			}
-			$values = array(
-				$cols['log']   => array( 'text' => leadkit_days_text( $days, $after ) ),
-				$cols['count'] => (string) count( $days ),
-			);
-			if ( $days ) {
-				$values[ $cols['seen'] ] = array( 'date' => wp_date( 'Y-m-d', $latest ) );
-			}
-			$res = leadkit_monday(
-				'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
-				array( 'i' => (string) $item, 'b' => (string) $board, 'v' => wp_json_encode( $values ) )
-			);
-			$monday[ $board ] = $res ? 'updated' : 'failed';
-
-			$channel = 'monday_' . $board;
-			if ( $res && $came_back && $new_day_for( $channel ) ) {
-				$day  = $days[ $today ];
-				$note = '<p><strong>' . esc_html__( 'Came back to the site', 'leadkit' ) . '</strong> — '
-					. esc_html( wp_date( 'M j, Y', strtotime( $today ) ) ) . ': '
-					. esc_html( leadkit_day_pages( $day ) ) . '</p>'
-					. '<p>' . esc_html__( 'The full log is in the "Return visits log" column. — LeadKit', 'leadkit' ) . '</p>';
-				leadkit_monday(
-					'mutation ($i: ID!, $body: String!) { create_update(item_id: $i, body: $body) { id } }',
-					array( 'i' => (string) $item, 'body' => $note )
+			// Every row of this person on the board: this browser's, and rows
+			// from their other browsers linked by email.
+			foreach ( $items as $item ) {
+				$values = array(
+					$cols['log']   => array( 'text' => leadkit_days_text( $days, $after ) ),
+					$cols['count'] => (string) count( $days ),
 				);
-				$state['notified'][ $channel ] = $today;
+				if ( $days ) {
+					$values[ $cols['seen'] ] = array( 'date' => wp_date( 'Y-m-d', $latest ) );
+				}
+				$res = leadkit_monday(
+					'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
+					array( 'i' => (string) $item, 'b' => (string) $board, 'v' => wp_json_encode( $values ) )
+				);
+				$monday[ $board . ':' . $item ] = $res ? 'updated' : 'failed';
+
+				$channel = 'monday_' . $board . '_' . $item;
+				if ( $res && $came_back && $new_day_for( $channel ) ) {
+					$day  = $days[ $today ];
+					$note = '<p><strong>' . esc_html__( 'Came back to the site', 'leadkit' ) . '</strong> — '
+						. esc_html( wp_date( 'M j, Y', strtotime( $today ) ) ) . ': '
+						. esc_html( leadkit_day_pages( $day ) ) . '</p>'
+						. '<p>' . esc_html__( 'The full log is in the "Return visits log" column. — LeadKit', 'leadkit' ) . '</p>';
+					leadkit_monday(
+						'mutation ($i: ID!, $body: String!) { create_update(item_id: $i, body: $body) { id } }',
+						array( 'i' => (string) $item, 'body' => $note )
+					);
+					$state['notified'][ $channel ] = $today;
+				}
 			}
 		}
 	}
@@ -399,39 +400,57 @@ function leadkit_monday( $query, $variables = array() ) {
 }
 
 /**
- * The item on a board whose "visitor_id" column holds this visitor, cached.
+ * Every item on a board for this visitor, cached.
  *
- * A miss is cached for 10 minutes rather than forever: the visitor is marked a
- * lead the moment the form redirects, which can be a few seconds before
- * monday.com has written the item.
+ * The item whose visitor_id is this browser, plus any whose "Visitor IDs"
+ * holds it — rows of the same person submitted from other browsers, linked by
+ * email (monday-people.php). A miss is cached for 10 minutes rather than
+ * forever: the visitor is marked a lead the moment the form redirects, which
+ * can be a few seconds before monday.com has written the item.
  *
  * @param string $board   Board id.
  * @param string $visitor Visitor id.
  * @param array  $state   Visitor state (by reference, holds the cache).
- * @return string Item id, or empty.
+ * @return string[] Item ids.
  */
-function leadkit_monday_find_item( $board, $visitor, &$state ) {
+function leadkit_monday_find_items( $board, $visitor, &$state ) {
 	$cached = $state['monday'][ $board ] ?? null;
 	if ( is_array( $cached ) ) {
-		if ( ! empty( $cached['item'] ) ) {
-			return (string) $cached['item'];
+		if ( ! empty( $cached['items'] ) ) {
+			return array_map( 'strval', (array) $cached['items'] );
+		}
+		if ( ! empty( $cached['item'] ) ) { // Stored by an earlier build.
+			return array( (string) $cached['item'] );
 		}
 		if ( time() - (int) ( $cached['checked'] ?? 0 ) < 600 ) {
-			return '';
+			return array();
 		}
 	}
 
-	$cols = leadkit_monday_columns( $board );
-	$item = '';
+	$items = array();
+	$cols  = leadkit_monday_columns( $board );
 	if ( $cols && ! empty( $cols['visitor'] ) ) {
 		$data = leadkit_monday(
-			'query ($b: ID!, $c: String!, $v: [String]!) { items_page_by_column_values(board_id: $b, limit: 1, columns: [{column_id: $c, column_values: $v}]) { items { id } } }',
+			'query ($b: ID!, $c: String!, $v: [String]!) { items_page_by_column_values(board_id: $b, limit: 10, columns: [{column_id: $c, column_values: $v}]) { items { id } } }',
 			array( 'b' => (string) $board, 'c' => $cols['visitor'], 'v' => array( $visitor ) )
 		);
-		$item = (string) ( $data['items_page_by_column_values']['items'][0]['id'] ?? '' );
+		foreach ( (array) ( $data['items_page_by_column_values']['items'] ?? array() ) as $it ) {
+			$items[] = (string) $it['id'];
+		}
 	}
-	$state['monday'][ $board ] = array( 'item' => $item, 'checked' => time() );
-	return $item;
+	$pcols = get_transient( 'leadkit_monday_pcols_' . $board );
+	if ( is_array( $pcols ) && ! empty( $pcols['ids'] ) ) {
+		$data = leadkit_monday(
+			'query ($b: [ID!], $c: String!, $v: CompareValue!) { boards(ids: $b) { items_page(limit: 25, query_params: {rules: [{column_id: $c, compare_value: $v, operator: contains_text}]}) { items { id } } } }',
+			array( 'b' => array( (string) $board ), 'c' => $pcols['ids'], 'v' => array( $visitor ) )
+		);
+		foreach ( (array) ( $data['boards'][0]['items_page']['items'] ?? array() ) as $it ) {
+			$items[] = (string) $it['id'];
+		}
+	}
+	$items = array_values( array_unique( $items ) );
+	$state['monday'][ $board ] = array( 'items' => $items, 'checked' => time() );
+	return $items;
 }
 
 /**

@@ -342,6 +342,8 @@ function leadkit_mform_value( $col, $q, $answer ) {
 		case 'long_text':
 			return array( 'text' => mb_substr( is_array( $answer ) ? implode( "\n", $answer ) : $answer, 0, 20000 ) );
 		case 'email':
+			// Lowercase, so the same person is found again however they type it.
+			$answer = strtolower( $answer );
 			return is_email( $answer ) ? array( 'email' => $answer, 'text' => $answer ) : null;
 		case 'phone':
 			$digits  = preg_replace( '/[^\d+]/', '', $answer );
@@ -557,9 +559,24 @@ function leadkit_handle_monday_form( $req ) {
 			$key   = leadkit_visitor_key( $visitor );
 			$state = get_option( $key, array() );
 			$state = is_array( $state ) ? $state : array();
-			$state['monday'][ $board ] = array( 'item' => $item_id, 'checked' => time() );
+			$state['monday'][ $board ] = array( 'items' => array( $item_id ), 'checked' => time() );
 			update_option( $key, $state, false );
 		}
+
+		// Same email as an earlier row? Same person: link them.
+		$email_col = '';
+		foreach ( $def['columns'] as $cid => $c ) {
+			if ( 'email' === $c['type'] && isset( $values[ $cid ] ) ) {
+				$email_col = $cid;
+				break;
+			}
+		}
+		if ( $email && $email_col ) {
+			leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visitor, $item );
+		}
+	}
+	if ( ! is_wp_error( $post_id ) && $email ) {
+		leadkit_link_wp_leads( $post_id, $email );
 	}
 
 	if ( ! is_wp_error( $post_id ) ) {

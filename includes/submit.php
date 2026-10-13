@@ -153,6 +153,7 @@ function leadkit_handle_submit( $req ) {
 			// So a return visit by the same browser finds this lead.
 			update_post_meta( $post_id, '_leadkit_visitor_id', $vid );
 		}
+		leadkit_link_wp_leads( $post_id, $fields['email'] );
 	}
 
 	// ---- then notify -----------------------------------------------------

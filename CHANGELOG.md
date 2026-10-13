@@ -2,6 +2,14 @@
 
 ## 1.3.1
 
+- **Same email, same person.** When `[leadkit_monday_form]` creates an item,
+  earlier items on the board with the same email address are found. Each
+  submission stays its own row; all of that person's rows get a "Visitor IDs"
+  column (every browser id seen for them) and a "Submissions" count, created
+  the first time, plus updates linking them ("Same person as…" / "Submitted
+  again…"). Return visits from any of those browsers are added to every one
+  of their rows. LeadKit's own leads with the same email share visitor ids the
+  same way. Emails are stored lowercase so they match however they are typed.
 - **After submitting.** Pages viewed in the 30 minutes after someone submits
   are kept and shown as "After submitting" in the return-visits log on the
   monday item and the LeadKit lead — someone who volunteers and then goes
