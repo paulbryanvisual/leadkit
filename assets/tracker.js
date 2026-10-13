@@ -957,6 +957,19 @@
 					form.appendChild( hiddenInput );
 				}
 				hiddenInput.value = JSON.stringify( self.data );
+
+				// A monday.com form rendered by LeadKit: every tracking value,
+				// as the server maps them onto the board's columns by title.
+				if ( form.hasAttribute( 'data-leadkit-monday' ) ) {
+					var tracking = form.querySelector( 'input[name="tracking"]' );
+					if ( ! tracking ) {
+						tracking = document.createElement( 'input' );
+						tracking.type = 'hidden';
+						tracking.name = 'tracking';
+						form.appendChild( tracking );
+					}
+					tracking.value = JSON.stringify( self.formParams() );
+				}
 				self.markLead( form.getAttribute( 'data-leadkit-form' ) || 'leadkit-form' );
 			} );
 		}

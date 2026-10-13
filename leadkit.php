@@ -39,6 +39,7 @@ require_once LEADKIT_DIR . '/includes/updater.php';
 require_once LEADKIT_DIR . '/includes/leads.php';
 require_once LEADKIT_DIR . '/includes/submit.php';
 require_once LEADKIT_DIR . '/includes/returns.php';
+require_once LEADKIT_DIR . '/includes/monday-form.php';
 
 /**
  * One option, one array — portable and easy to export between installs.

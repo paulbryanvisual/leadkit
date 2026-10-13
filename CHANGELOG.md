@@ -61,6 +61,18 @@ field, `utm_source`, and drops the rest.
     and "Return visits" columns, created the first time, and one update a day
     on the item, which notifies its subscribers.
   - A first phone or email tap is stored as a lead and emailed.
+- **monday.com forms as plain HTML.** `[leadkit_monday_form form="<token>"
+  board="<id>" name="volunteer"]` renders a monday.com form's questions as
+  ordinary markup — no CSS of its own, an `lk-form__` class on every element
+  (`class_prefix` to change it), all on one page — and submits to
+  `leadkit/v1/monday`, which creates the item through the API. Questions,
+  labels, required flags and choices come from the monday form (cached ten
+  minutes). Answers go to their columns, file uploads to the file column, and
+  every tracking value to the column of the same title, with no URL length
+  limit. Saved as a LeadKit lead first; a failed monday call shows as NOT SENT
+  on the lead instead of losing it. Only boards listed in settings are
+  accepted, so the site's token cannot be pointed at any other board. Return
+  visits find the new item immediately.
 - **Donation returns are logged.** A page reached from the donation host (the
   thank-you redirect) records a `donation_return` event with the credited
   campaign and fires `leadkit:donation-return` on `document`.

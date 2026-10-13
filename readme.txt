@@ -98,6 +98,9 @@ moving an existing site onto the plugin needs no re-typing.
 * Return visits: the sync and track endpoints the tracker always called are
   now built in. Return visits are saved on LeadKit leads (optional email) and
   added to matching monday.com items (log, last seen, count, daily update).
+* [leadkit_monday_form form="" board="" name=""]: a monday.com form rendered as
+  plain, unstyled HTML on the site and submitted through the monday.com API,
+  with all tracking values mapped to same-named columns.
 * Returns from the donation form are logged with their campaign.
 * Leads list has a Campaign column; campaign fields are stored as lead meta and
   shown in the notification email.
