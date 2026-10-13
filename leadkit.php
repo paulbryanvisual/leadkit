@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.3.0
+ * Version:           1.3.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan Visual
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.3.0' );
+define( 'LEADKIT_VERSION', '1.3.1' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -142,11 +142,17 @@ add_action(
 
 		$opts = leadkit_options();
 
+		/*
+		 * Versioned by the file's own modification time as well as the plugin
+		 * version. The version alone stayed "1.3.0" through several changes
+		 * to this file, so browsers and SiteGround's optimizer kept serving
+		 * the first copy they saw — and the form silently lost its tracking.
+		 */
 		wp_enqueue_script(
 			'leadkit-tracker',
 			LEADKIT_URL . 'assets/tracker.js',
 			array(),
-			LEADKIT_VERSION,
+			LEADKIT_VERSION . '.' . (int) @filemtime( LEADKIT_DIR . '/assets/tracker.js' ),
 			array(
 				'strategy'  => 'defer',
 				'in_footer' => true,

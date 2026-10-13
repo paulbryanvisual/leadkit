@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1
+
+- The tracker script is versioned by its file's modification time, so a
+  changed tracker.js always reaches browsers and caching plugins. Through the
+  1.3.0 work the URL stayed `?ver=1.3.0`, browsers and SiteGround Optimizer
+  kept the first copy, and monday.com forms were submitted without their
+  tracking values.
+
 ## 1.3.0
 
 Campaign tracking that survives the trip to a donation form. Built for the
