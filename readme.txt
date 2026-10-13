@@ -70,7 +70,9 @@ campaign credited when the visitor came back from the donation host).
   campaign (default givelively.org; subdomains match). Empty turns it off.
 * Form hosts — comma-separated domains of outside forms that take hidden
   fields (default forms.monday.com, wkf.ms). They get utm_source … utm_term
-  plus the campaign history parameter.
+  plus the campaign history parameter and first_touch, landing_page,
+  referrer, click_id, form_page, pages_viewed, page_path, time_on_site,
+  photos_viewed, device, first_visit and visitor_id.
 * History parameter — name of that parameter (default campaign_history).
 * Campaign credit (days) — how long the latest campaign keeps the credit.
   0 (default) = for as long as the visitor's browser keeps the data.

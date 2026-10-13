@@ -35,6 +35,11 @@ field, `utm_source`, and drops the rest.
   name captures it as a column. Past 1,500 characters the oldest middle
   touches give way to `…`; the first and most recent stay. LeadKit's own leads
   store the same string, uncapped, as `_leadkit_utm_history`.
+  Those forms also get the rest of what the tracker knows, each as its own
+  parameter for a form tag to capture: `first_touch`, `landing_page`,
+  `referrer`, `click_id`, `form_page`, `pages_viewed`, `page_path`,
+  `time_on_site` (active seconds), `photos_viewed`, `device`, `first_visit`
+  and `visitor_id` (LeadKit's id, to join with lead records).
 - **Donation returns are logged.** A page reached from the donation host (the
   thank-you redirect) records a `donation_return` event with the credited
   campaign and fires `leadkit:donation-return` on `document`.

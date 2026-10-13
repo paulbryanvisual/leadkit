@@ -41,6 +41,7 @@
 	var ATTRIBUTION_DAYS = parseInt( cfg.attributionDays, 10 ) > 0 ? parseInt( cfg.attributionDays, 10 ) : 0;
 	var HISTORY_SEP = ' > ';
 	var HISTORY_MAX = 1500;
+	var PATH_MAX = 600;
 	var HISTORY_PARAM = typeof cfg.historyParam === 'string' ? cfg.historyParam : 'campaign_history';
 	var FORM_HOSTS = ( Array.isArray( cfg.formHosts ) ? cfg.formHosts : [ 'forms.monday.com', 'wkf.ms' ] )
 		.map( function ( h ) {
@@ -409,19 +410,90 @@
 		 * parameter, plus the whole history in one. On a monday.com form each
 		 * parameter becomes a column through a form tag of the same name.
 		 */
-		decorateFormUrl( url ) {
+		/**
+		 * Everything the tracker knows, as flat form parameters — for an
+		 * outside form (monday.com WorkForms by default) that can only take
+		 * hidden values from its URL. On a monday.com form, a form tag with
+		 * each name captures it as a text column. Empty values are left off.
+		 *
+		 *   utm_source … utm_term  the campaign with the credit
+		 *   campaign_history       every campaign touch, oldest first
+		 *   first_touch            the first campaign, packed
+		 *   landing_page           where the credited campaign landed
+		 *   referrer               the site they came from, if any
+		 *   click_id               gclid / gbraid / wbraid / fbclid / msclkid
+		 *   form_page              the page the form was opened from
+		 *   pages_viewed           pages seen, this one included
+		 *   page_path              those pages in order, " > "
+		 *   time_on_site           active seconds across the visit
+		 *   photos_viewed          distinct photographs opened
+		 *   device                 mobile / tablet / desktop and width
+		 *   first_visit            date of the first visit (YYYY-MM-DD)
+		 *   visitor_id             LeadKit's id, to join with lead records
+		 */
+		formParams() {
+			var self = this;
+			var d = this.data;
+			var out = {};
 			var t = this.attribution();
-			var hist = this.historyString();
-			if ( ! t && ! hist ) return null;
 
-			var before = url.toString();
 			if ( t ) {
 				UTM_KEYS.forEach( function ( k ) {
-					if ( t[ k ] ) url.searchParams.set( 'utm_' + k, t[ k ] );
+					if ( t[ k ] ) out[ 'utm_' + k ] = t[ k ];
 				} );
+				if ( t.landing ) out.landing_page = t.landing;
+				if ( t.click_id ) out.click_id = t.click_id;
 			}
-			if ( hist && HISTORY_PARAM ) url.searchParams.set( HISTORY_PARAM, hist );
+			var hist = this.historyString();
+			if ( hist && HISTORY_PARAM ) out[ HISTORY_PARAM ] = hist;
+			if ( this.hasCampaign( d.utm_first ) ) {
+				var f = d.utm_first;
+				out.first_touch = this.packParts( [ f.medium, f.source, f.campaign, f.content, f.term ] );
+			}
+			if ( d.referrer ) out.referrer = d.referrer;
 
+			out.form_page = window.location.pathname;
+
+			var views = ( d.page_views || [] ).slice();
+			var paths = views.map( function ( v ) {
+				return v.path;
+			} );
+			paths.push( window.location.pathname );
+			out.pages_viewed = String( paths.length );
+			var trail = paths.join( HISTORY_SEP );
+			if ( trail.length > PATH_MAX ) {
+				var tail = paths.slice( 1 );
+				while ( tail.length > 1 && ( paths[ 0 ] + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP ) ).length > PATH_MAX ) {
+					tail.shift();
+				}
+				trail = paths[ 0 ] + HISTORY_SEP + '…' + HISTORY_SEP + tail.join( HISTORY_SEP );
+			}
+			out.page_path = trail;
+
+			this.updateActiveTime();
+			var ms = views.reduce( function ( sum, v ) {
+				return sum + ( +v.active_time_ms || 0 );
+			}, 0 ) + this.pageActiveTimeMs;
+			out.time_on_site = String( Math.round( ms / 1000 ) );
+
+			var photos = ( d.photos_seen || [] ).length;
+			if ( photos ) out.photos_viewed = String( photos );
+
+			var w = ( d.device && d.device.width ) || window.innerWidth;
+			out.device = ( w < 768 ? 'mobile' : w < 1100 ? 'tablet' : 'desktop' ) + ' ' + w + 'px';
+
+			if ( d.started_at ) out.first_visit = String( d.started_at ).slice( 0, 10 );
+			if ( d.id ) out.visitor_id = d.id;
+
+			return out;
+		}
+
+		decorateFormUrl( url ) {
+			var params = this.formParams();
+			var before = url.toString();
+			Object.keys( params ).forEach( function ( k ) {
+				url.searchParams.set( k, params[ k ] );
+			} );
 			var after = url.toString();
 			return after === before ? null : after;
 		}
@@ -469,10 +541,19 @@
 				if ( next ) el.setAttribute( 'data-widget-src', next );
 			} );
 
-			// A new src reloads the frame — only worth it for a real campaign.
-			if ( ! self.attribution() && ! self.historyString() ) return;
+			// A new src reloads the frame: donation embeds only when there is a
+			// real campaign; form embeds once, on load (their values are a
+			// snapshot at that moment — a link click gets fresh ones).
 			root.querySelectorAll( 'iframe[src]' ).forEach( function ( f ) {
-				if ( f.hasAttribute( 'data-leadkit-keep' ) ) return;
+				if ( f.hasAttribute( 'data-leadkit-keep' ) || f.hasAttribute( 'data-leadkit-done' ) ) return;
+				var u;
+				try {
+					u = new URL( f.getAttribute( 'src' ), window.location.href );
+				} catch ( e ) {
+					return;
+				}
+				if ( self.isDonationUrl( u ) && ! self.attribution() ) return;
+				if ( self.isFormUrl( u ) ) f.setAttribute( 'data-leadkit-done', '' );
 				var next = self.decorateUrl( f.getAttribute( 'src' ) );
 				if ( next ) f.setAttribute( 'src', next );
 			} );
