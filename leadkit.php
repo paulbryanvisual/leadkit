@@ -41,6 +41,7 @@ require_once LEADKIT_DIR . '/includes/submit.php';
 require_once LEADKIT_DIR . '/includes/returns.php';
 require_once LEADKIT_DIR . '/includes/monday-summary.php';
 require_once LEADKIT_DIR . '/includes/monday-people.php';
+require_once LEADKIT_DIR . '/includes/monday-crm.php';
 require_once LEADKIT_DIR . '/includes/monday-form.php';
 
 /**
@@ -58,6 +59,7 @@ function leadkit_options() {
 		'track_url'         => '',
 		'monday_token'      => '',
 		'monday_boards'     => '',
+		'monday_people_board' => '',
 		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
 		'turnstile_secret'  => '',

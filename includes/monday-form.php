@@ -571,7 +571,28 @@ function leadkit_handle_monday_form( $req ) {
 				break;
 			}
 		}
-		if ( $email && $email_col ) {
+		if ( $email && leadkit_monday_people_board() ) {
+			// One row per person on the People board; the submission is connected to it.
+			$phone_val = null;
+			foreach ( $def['columns'] as $cid => $c ) {
+				if ( 'phone' === $c['type'] && isset( $values[ $cid ] ) ) {
+					$phone_val = $values[ $cid ];
+					break;
+				}
+			}
+			leadkit_person_upsert(
+				array(
+					'board'   => $board,
+					'item_id' => $item_id,
+					'name'    => $item,
+					'email'   => $email,
+					'phone'   => $phone_val,
+					'visitor' => $visitor,
+					'summary' => $summary_data,
+					'form'    => $def['title'],
+				)
+			);
+		} elseif ( $email && $email_col ) {
 			leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visitor, $item );
 		}
 	}

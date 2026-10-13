@@ -238,7 +238,37 @@ function leadkit_handle_sync( $req ) {
 
 	// ---- monday.com -----------------------------------------------------------
 	$monday = array();
-	if ( leadkit_monday_token() ) {
+	$people = leadkit_monday_token() ? leadkit_monday_people_board() : '';
+	$person = $people ? leadkit_person_for_visitor( $visitor, $state ) : '';
+	if ( $person ) {
+		// One person, one log: return visits go on the People row.
+		$pcols  = leadkit_people_columns( $people );
+		$values = array(
+			$pcols['log']     => array( 'text' => leadkit_days_text( $days, $after ) ),
+			$pcols['returns'] => (string) count( $days ),
+		);
+		if ( $days ) {
+			$values[ $pcols['last'] ] = array( 'date' => wp_date( 'Y-m-d', $latest ) );
+		}
+		$res = leadkit_monday(
+			'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
+			array( 'i' => $person, 'b' => $people, 'v' => wp_json_encode( $values ) )
+		);
+		$monday[ 'person:' . $person ] = $res ? 'updated' : 'failed';
+		if ( $res && $came_back && $new_day_for( 'person' ) ) {
+			leadkit_monday(
+				'mutation ($i: ID!, $body: String!) { create_update(item_id: $i, body: $body) { id } }',
+				array(
+					'i'    => $person,
+					'body' => '<p><strong>' . esc_html__( 'Came back to the site', 'leadkit' ) . '</strong> — '
+						. esc_html( wp_date( 'M j, Y', strtotime( $today ) ) ) . ': ' . esc_html( leadkit_day_pages( $days[ $today ] ) ) . '</p>'
+						. '<p>' . esc_html__( 'The full log is in the "Return visits log" column. — LeadKit', 'leadkit' ) . '</p>',
+				)
+			);
+			$state['notified']['person'] = $today;
+		}
+	} elseif ( leadkit_monday_token() ) {
+		// No People board, or this browser is not on it: add to the submission rows.
 		foreach ( leadkit_monday_boards() as $board ) {
 			$items = leadkit_monday_find_items( $board, $visitor, $state );
 			$cols  = $items ? leadkit_monday_columns( $board ) : null;

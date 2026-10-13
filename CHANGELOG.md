@@ -2,6 +2,16 @@
 
 ## 1.3.1
 
+- **People and their submissions.** Set a **monday.com People board** and each
+  person gets one row there, matched by email, the way Salesforce has a
+  Contact with records related to it. Every `[leadkit_monday_form]` submission
+  finds or creates its person, is connected both ways ("Person" on the
+  submission, "Form submissions" on the person), and rolls the person up:
+  phone, Visitor IDs, Submissions, Engagement (their best), First and Latest
+  source, First and Last seen. Return visits go to the person — log, count,
+  last seen and a daily update — instead of each submission. Columns are
+  created the first time, so the board can start empty. Without a People
+  board, rows are linked to each other by email as before.
 - **Same email, same person.** When `[leadkit_monday_form]` creates an item,
   earlier items on the board with the same email address are found. Each
   submission stays its own row; all of that person's rows get a "Visitor IDs"

@@ -101,6 +101,7 @@ add_action(
 						'monday_token'      => leadkit_keep_secret( $raw['monday_token'] ?? '', 'monday_token' ),
 						'monday_boards'     => implode( ', ', array_unique( preg_match_all( '/\d{5,}/', (string) ( $raw['monday_boards'] ?? '' ), $mb ) ? $mb[0] : array() ) ),
 						'notify_returns'    => empty( $raw['notify_returns'] ) ? '' : '1',
+						'monday_people_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_people_board'] ?? '' ), $pb ) ? $pb[0] : '',
 						'from_email'        => sanitize_email( $raw['from_email'] ?? '' ),
 						'from_name'         => sanitize_text_field( $raw['from_name'] ?? '' ),
 						'storage_prefix'    => preg_replace( '/[^a-zA-Z0-9_]/', '', $raw['storage_prefix'] ?? 'leadkit' ) ?: 'leadkit',
@@ -152,6 +153,7 @@ function leadkit_render_settings_page() {
 		'notify_returns'    => array( __( 'Email me when a lead comes back', 'leadkit' ), __( 'Once a day at most per lead: when someone who already sent the form (or tapped the phone number) visits again, email the pages they looked at. The visits are saved on the lead either way.', 'leadkit' ), 'checkbox' ),
 		'monday_token'      => array( __( 'monday.com API token', 'leadkit' ), __( 'From monday.com: your avatar → Developers → My access tokens. Used only on the server, to add return visits to the matching monday.com item. Never shown again once saved; leave empty to keep it, a single - clears it. Or define LEADKIT_MONDAY_TOKEN in wp-config.php.', 'leadkit' ), 'secret' ),
 		'monday_boards'     => array( __( 'monday.com boards', 'leadkit' ), __( 'Board ids (the number in the board URL), comma-separated. Each needs a visitor_id column, which a form tag named visitor_id creates. When a returning visitor matches an item, LeadKit fills "Return visits log", "Last seen" and "Return visits" columns (creating them the first time) and posts an update on the item once a day. Set the form to redirect after submitting to a page on this site with ?leadkit_lead=<form name> so LeadKit knows they submitted.', 'leadkit' ) ),
+		'monday_people_board' => array( __( 'monday.com People board', 'leadkit' ), __( 'Optional. A board id for one row per person, matched by email. Every submission is connected to its person, the person\'s columns are rolled up (visitor ids, submissions, engagement, first and latest source, first and last seen), and return visits are added to the person instead of each submission. Columns are created the first time, so an empty board is fine.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
 	?>
