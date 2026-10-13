@@ -232,7 +232,7 @@ function leadkit_journey_update_html( $s ) {
 	$day = '';
 	$open = false;
 	foreach ( $s['list'] as $p ) {
-		$d = $p['at'] ? wp_date( 'l, M j, Y', $p['at'] ) : __( 'Earlier', 'leadkit' );
+		$d = $p['at'] ? wp_date( 'l, M j, Y', $p['at'] ) : __( 'Pages, in order', 'leadkit' );
 		if ( $d !== $day ) {
 			$html .= ( $open ? '</ul>' : '' ) . '<p><strong>' . esc_html( $d ) . '</strong></p><ul>';
 			$day   = $d;
@@ -244,7 +244,8 @@ function leadkit_journey_update_html( $s ) {
 			. ( $p['visits'] > 1 ? ' over ' . (int) $p['visits'] . ' loads' : '' )
 			. ', read ' . ( $p['visits'] > 1 ? 'up to ' : '' ) . (int) $p['scroll'] . '%</li>';
 	}
-	return $html . ( $open ? '</ul>' : '' ) . '<p><em>Times are ' . esc_html( wp_date( 'T' ) ) . ' (the site\'s time zone) — LeadKit</em></p>';
+	$timed = (bool) array_filter( array_column( $s['list'], 'at' ) );
+	return $html . ( $open ? '</ul>' : '' ) . '<p><em>' . ( $timed ? 'Times are ' . esc_html( wp_date( 'T' ) ) . ', the site\'s time zone. ' : '' ) . '— LeadKit</em></p>';
 }
 
 /**
