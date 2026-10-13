@@ -43,13 +43,14 @@ Pages Functions). Configure the three URLs under Settings → LeadKit.
   name, email, phone, message, projectType, analyticsData (JSON string),
   cf-turnstile-response (when Turnstile is enabled — verify it server-side).
 
-`track_url` (default `/api/track-interaction`) — JSON POST on the first
+`track_url` (default: this plugin's `leadkit/v1/track`) — JSON POST on the first
 identifying click:
   { "analyticsData": { …session… }, "interactionType": "phone_click"|"email_click",
     "interactionValue": "903-…"|"someone@…" }
 
-`sync_url` (default `/api/sync-lead`) — JSON POST on visibility change for
-known leads:
+`sync_url` (default: this plugin's `leadkit/v1/sync`) — JSON POST when the
+page is hidden, for known leads: { visitor_id, lead_at, lead_forms,
+page_views, device, utm }. Older builds sent:
   { "analyticsData": { id, device, utm, utm_first, utm_touches, referrer,
     page_views: [ { path, active_time_ms, max_scroll_percent, time } ],
     events: [ { type, value, time, path } ], started_at } }
@@ -94,6 +95,9 @@ moving an existing site onto the plugin needs no re-typing.
   into utm_source, the one field Give Lively keeps.
 * Outside forms (monday.com by default) get the UTM fields and the full
   campaign history, oldest first, as campaign_history.
+* Return visits: the sync and track endpoints the tracker always called are
+  now built in. Return visits are saved on LeadKit leads (optional email) and
+  added to matching monday.com items (log, last seen, count, daily update).
 * Returns from the donation form are logged with their campaign.
 * Leads list has a Campaign column; campaign fields are stored as lead meta and
   shown in the notification email.

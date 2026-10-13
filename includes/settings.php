@@ -98,6 +98,9 @@ add_action(
 						'turnstile_hostnames' => sanitize_text_field( $raw['turnstile_hostnames'] ?? '' ),
 						'turnstile_fail_open' => empty( $raw['turnstile_fail_open'] ) ? '' : '1',
 						'notify_email'      => leadkit_clean_email_list( $raw['notify_email'] ?? '' ),
+						'monday_token'      => leadkit_keep_secret( $raw['monday_token'] ?? '', 'monday_token' ),
+						'monday_boards'     => implode( ', ', array_unique( preg_match_all( '/\d{5,}/', (string) ( $raw['monday_boards'] ?? '' ), $mb ) ? $mb[0] : array() ) ),
+						'notify_returns'    => empty( $raw['notify_returns'] ) ? '' : '1',
 						'from_email'        => sanitize_email( $raw['from_email'] ?? '' ),
 						'from_name'         => sanitize_text_field( $raw['from_name'] ?? '' ),
 						'storage_prefix'    => preg_replace( '/[^a-zA-Z0-9_]/', '', $raw['storage_prefix'] ?? 'leadkit' ) ?: 'leadkit',
@@ -146,6 +149,9 @@ function leadkit_render_settings_page() {
 		'form_hosts'        => array( __( 'Form hosts', 'leadkit' ), __( 'Comma-separated domains of outside forms that take hidden fields (default forms.monday.com, wkf.ms). Links and embeds to them get utm_source, utm_medium, utm_campaign, utm_content and utm_term for the campaign with the credit, plus the full campaign history. On a monday.com form, add a form tag with each of those names to capture them as columns. Empty turns it off.', 'leadkit' ) ),
 		'history_param'     => array( __( 'History parameter', 'leadkit' ), __( 'Name of the parameter carrying every campaign the visitor arrived from, oldest first, e.g. email__mailchimp__light-the-path__email-1 > social__instagram__light-the-path__post-3. Default campaign_history. Empty leaves it off.', 'leadkit' ) ),
 		'attribution_days'  => array( __( 'Campaign credit (days)', 'leadkit' ), __( 'How long the latest campaign link a visitor arrived from keeps the credit. 0 (the default) means for as long as their browser keeps the data; a newer campaign always replaces it. Every campaign touch is kept either way.', 'leadkit' ) ),
+		'notify_returns'    => array( __( 'Email me when a lead comes back', 'leadkit' ), __( 'Once a day at most per lead: when someone who already sent the form (or tapped the phone number) visits again, email the pages they looked at. The visits are saved on the lead either way.', 'leadkit' ), 'checkbox' ),
+		'monday_token'      => array( __( 'monday.com API token', 'leadkit' ), __( 'From monday.com: your avatar → Developers → My access tokens. Used only on the server, to add return visits to the matching monday.com item. Never shown again once saved; leave empty to keep it, a single - clears it. Or define LEADKIT_MONDAY_TOKEN in wp-config.php.', 'leadkit' ), 'secret' ),
+		'monday_boards'     => array( __( 'monday.com boards', 'leadkit' ), __( 'Board ids (the number in the board URL), comma-separated. Each needs a visitor_id column, which a form tag named visitor_id creates. When a returning visitor matches an item, LeadKit fills "Return visits log", "Last seen" and "Return visits" columns (creating them the first time) and posts an update on the item once a day. Set the form to redirect after submitting to a page on this site with ?leadkit_lead=<form name> so LeadKit knows they submitted.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
 	?>

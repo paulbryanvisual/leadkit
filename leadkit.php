@@ -38,6 +38,7 @@ require_once LEADKIT_DIR . '/includes/journey.php';
 require_once LEADKIT_DIR . '/includes/updater.php';
 require_once LEADKIT_DIR . '/includes/leads.php';
 require_once LEADKIT_DIR . '/includes/submit.php';
+require_once LEADKIT_DIR . '/includes/returns.php';
 
 /**
  * One option, one array — portable and easy to export between installs.
@@ -49,8 +50,12 @@ function leadkit_options() {
 		// Empty means "use the route this plugin registers" — resolved below,
 		// so the default is correct on any host without anyone configuring it.
 		'submit_url'        => '',
-		'sync_url'          => '/api/sync-lead',
-		'track_url'         => '/api/track-interaction',
+		// Empty = this plugin's own routes (leadkit/v1/sync, leadkit/v1/track).
+		'sync_url'          => '',
+		'track_url'         => '',
+		'monday_token'      => '',
+		'monday_boards'     => '',
+		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
 		'turnstile_secret'  => '',
 		'resend_api_key'    => '',
@@ -77,6 +82,14 @@ function leadkit_options() {
 	 */
 	if ( '' === $opts['submit_url'] || '/api/submit' === $opts['submit_url'] ) {
 		$opts['submit_url'] = leadkit_submit_endpoint();
+	}
+	// The same for the two Cloudflare-era tracker endpoints, which have no
+	// counterpart anywhere but here.
+	if ( '' === $opts['sync_url'] || '/api/sync-lead' === $opts['sync_url'] ) {
+		$opts['sync_url'] = rest_url( LEADKIT_REST_NS . '/sync' );
+	}
+	if ( '' === $opts['track_url'] || '/api/track-interaction' === $opts['track_url'] ) {
+		$opts['track_url'] = rest_url( LEADKIT_REST_NS . '/track' );
 	}
 
 	return $opts;

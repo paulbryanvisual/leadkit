@@ -41,6 +41,26 @@ field, `utm_source`, and drops the rest.
   seconds and scroll depth, e.g. `/protect/ 45s 80%`),
   `time_on_site` (active seconds), `photos_viewed`, `device`, `first_visit`
   and `visitor_id` (LeadKit's id, to join with lead records).
+- **Return visits work again — and reach monday.com.** The tracker has
+  always called `/api/sync-lead` and `/api/track-interaction`; those were
+  Cloudflare functions that never came across to WordPress, so on every
+  WordPress site return visits and first phone taps went to a 404. Both are
+  routes in the plugin now (`leadkit/v1/sync`, `leadkit/v1/track`), and the old
+  paths are treated as unset.
+  - A visitor becomes a known lead when they submit LeadKit's form (they did
+    not before — only a phone or email tap counted), tap the phone or email,
+    or land on any page with `?leadkit_lead=<form name>`, which is where a
+    monday.com form should redirect after submitting.
+  - Pages from 30 minutes after that are return visits. Each page is recorded
+    once per load (updated in place, also on `pagehide`, which mobile Safari
+    fires when `beforeunload` does not) and sent when the page is hidden.
+  - LeadKit's own leads get a "Came back" log and a "Last back" column, and
+    with **Email me when a lead comes back** on, one email a day.
+  - On each board under **monday.com boards** (with an API token), the item
+    whose `visitor_id` column matches gets "Return visits log", "Last seen"
+    and "Return visits" columns, created the first time, and one update a day
+    on the item, which notifies its subscribers.
+  - A first phone or email tap is stored as a lead and emailed.
 - **Donation returns are logged.** A page reached from the donation host (the
   thank-you redirect) records a `donation_return` event with the credited
   campaign and fires `leadkit:donation-return` on `document`.

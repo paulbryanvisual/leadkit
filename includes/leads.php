@@ -82,6 +82,7 @@ add_filter(
 			'leadkit_type'  => __( 'Project', 'leadkit' ),
 			'leadkit_msg'   => __( 'Message', 'leadkit' ),
 			'leadkit_utm'   => __( 'Campaign', 'leadkit' ),
+			'leadkit_back'  => __( 'Last back', 'leadkit' ),
 			'leadkit_sent'  => __( 'Notified', 'leadkit' ),
 			'date'          => __( 'Received', 'leadkit' ),
 		);
@@ -124,6 +125,10 @@ add_action(
 				if ( $sub ) {
 					echo '<br><small>' . esc_html( implode( ' · ', $sub ) ) . '</small>';
 				}
+				break;
+			case 'leadkit_back':
+				$seen = (string) get_post_meta( $post_id, '_leadkit_last_seen', true );
+				echo $seen ? esc_html( wp_date( 'M j', strtotime( $seen ) ) ) : '—';
 				break;
 			case 'leadkit_sent':
 				/*
@@ -180,6 +185,12 @@ add_action(
 					echo '<tr><th style="width:9rem">' . esc_html( $label ) . '</th><td>' . esc_html( (string) $value ?: '—' ) . '</td></tr>';
 				}
 				echo '</tbody></table>';
+
+				$returns = json_decode( (string) get_post_meta( $post->ID, '_leadkit_return_visits', true ), true );
+				if ( is_array( $returns ) && $returns ) {
+					echo '<h2 style="margin:1.2em 0 .5em;font-size:14px">' . esc_html__( 'Came back', 'leadkit' ) . '</h2>';
+					echo '<div style="white-space:pre-wrap;background:#f0f6fc;padding:1rem;border:1px solid #c5d9ed">' . esc_html( leadkit_days_text( $returns ) ) . '</div>';
+				}
 
 				echo '<p><strong>' . esc_html__( 'Message', 'leadkit' ) . '</strong></p>';
 				echo '<div style="white-space:pre-wrap;background:#f6f7f7;padding:1rem;border:1px solid #dcdcde">'

@@ -27,8 +27,8 @@
 
 	var cfg = window.LeadKitCfg || {};
 	var PREFIX = cfg.storagePrefix || 'leadkit';
-	var SYNC_URL = cfg.syncUrl || '/api/sync-lead';
-	var TRACK_URL = cfg.trackUrl || '/api/track-interaction';
+	var SYNC_URL = typeof cfg.syncUrl === 'string' ? cfg.syncUrl : '';
+	var TRACK_URL = typeof cfg.trackUrl === 'string' ? cfg.trackUrl : '';
 	var SUBMIT_ACTION = cfg.submitAction || '/api/submit';
 
 	var UTM_KEYS = [ 'source', 'medium', 'campaign', 'content', 'term' ];
@@ -43,6 +43,7 @@
 	var HISTORY_MAX = 1500;
 	var PATH_MAX = 600;
 	var DETAIL_MAX = 1000;
+	var LEAD_PARAM = 'leadkit_lead';
 	var HISTORY_PARAM = typeof cfg.historyParam === 'string' ? cfg.historyParam : 'campaign_history';
 	var FORM_HOSTS = ( Array.isArray( cfg.formHosts ) ? cfg.formHosts : [ 'forms.monday.com', 'wkf.ms' ] )
 		.map( function ( h ) {
@@ -64,6 +65,8 @@
 			this.lastActiveTime = Date.now();
 			this.pageActiveTimeMs = 0;
 			this.maxScroll = 0;
+			this.viewStartedAt = new Date().toISOString();
+			this.viewId = this.viewStartedAt + ' ' + Math.random().toString( 36 ).slice( 2, 8 );
 
 			this.init();
 		}
@@ -121,19 +124,67 @@
 			return false;
 		}
 
-		syncToServer() {
-			// Only sync in the background if they are already a known lead.
-			if ( localStorage.getItem( this.leadKey ) !== 'true' ) return;
-			if ( this.data.page_views.length === 0 && this.data.events.length === 0 ) return;
+		isLead() {
+			try {
+				return localStorage.getItem( this.leadKey ) === 'true';
+			} catch ( e ) {
+				return false;
+			}
+		}
 
-			this.updateActiveTime();
+		/**
+		 * Mark this visitor as someone who identified themself, once.
+		 *
+		 * lead_at is the line the server draws: pages before it are the
+		 * journey that led to the enquiry (sent with it), pages after it are
+		 * return visits. Every later identification adds to lead_forms but
+		 * never moves lead_at.
+		 */
+		markLead( form ) {
+			try {
+				localStorage.setItem( this.leadKey, 'true' );
+			} catch ( e ) {}
+			var now = new Date().toISOString();
+			if ( ! this.data.lead_at ) this.data.lead_at = now;
+			this.data.lead_forms = this.data.lead_forms || [];
+			this.data.lead_forms.push( { form: String( form || 'form' ).slice( 0, 60 ), time: now, path: window.location.pathname } );
+			this.saveData();
+		}
+
+		/**
+		 * Return visits: a known lead's pages since they identified themself.
+		 *
+		 * Sent whenever the page is hidden or left. The current page is
+		 * recorded (updated in place, never duplicated) before sending, so the
+		 * server always has it. The server works out what is new; sending the
+		 * whole session each time keeps this side stateless and lets a sync
+		 * that failed simply be caught up by the next one.
+		 */
+		syncToServer() {
+			if ( ! SYNC_URL || ! this.isLead() || ! this.data.lead_at ) return;
+
+			this.recordPageView();
+
+			var since = Date.parse( this.data.lead_at );
+			var views = this.data.page_views.filter( function ( v ) {
+				return v.time && Date.parse( v.time ) >= since;
+			} );
+			if ( ! views.length ) return;
 
 			try {
 				fetch( SYNC_URL, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify( { analyticsData: this.data } ),
+					body: JSON.stringify( {
+						visitor_id: this.data.id,
+						lead_at: this.data.lead_at,
+						lead_forms: this.data.lead_forms || [],
+						page_views: views,
+						device: this.data.device,
+						utm: this.data.utm,
+					} ),
 					keepalive: true,
+					credentials: 'omit',
 				} );
 			} catch ( e ) {
 				console.error( 'Analytics sync failed', e );
@@ -460,7 +511,10 @@
 			// Every page so far, plus this one as it stands right now.
 			this.updateActiveTime();
 			this.handleScroll();
-			var views = ( d.page_views || [] ).concat( [ {
+			var here = this.viewId;
+			var views = ( d.page_views || [] ).filter( function ( v ) {
+				return v.id !== here;
+			} ).concat( [ {
 				path: window.location.pathname,
 				active_time_ms: this.pageActiveTimeMs,
 				max_scroll_percent: this.maxScroll,
@@ -630,7 +684,7 @@
 			this.logEvent( type, value );
 
 			try {
-				fetch( TRACK_URL, {
+				if ( TRACK_URL ) fetch( TRACK_URL, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify( {
@@ -641,10 +695,8 @@
 					keepalive: true,
 				} );
 				this.data.tracked_interaction = true;
-				this.saveData();
-
 				// Mark them as a lead since they initiated contact.
-				localStorage.setItem( this.leadKey, 'true' );
+				this.markLead( type );
 			} catch ( e ) {
 				console.error( 'Analytics tracking failed', e );
 			}
@@ -671,15 +723,35 @@
 			}
 		}
 
+		/*
+		 * This page load's entry in page_views, created the first time and
+		 * updated after that. It used to be pushed once, on beforeunload —
+		 * which mobile browsers often never fire, and which runs after the
+		 * last chance to send anything. Now it is written whenever the page
+		 * is hidden too, and kept to one entry per load.
+		 */
 		recordPageView() {
 			this.updateActiveTime();
+			this.handleScroll();
 
-			this.data.page_views.push( {
+			var entry = {
+				id: this.viewId,
 				path: window.location.pathname,
 				active_time_ms: this.pageActiveTimeMs,
 				max_scroll_percent: this.maxScroll,
-				time: new Date().toISOString(),
-			} );
+				time: this.viewStartedAt,
+				updated: new Date().toISOString(),
+			};
+			var views = this.data.page_views;
+			var found = false;
+			for ( var i = views.length - 1; i >= 0 && i >= views.length - 5; i-- ) {
+				if ( views[ i ].id === this.viewId ) {
+					views[ i ] = entry;
+					found = true;
+					break;
+				}
+			}
+			if ( ! found ) views.push( entry );
 			this.saveData();
 		}
 
@@ -739,10 +811,35 @@
 			);
 			this.handleScroll();
 
-			// Page-unload tracking.
+			// Page-unload tracking. pagehide is the one mobile Safari fires.
 			window.addEventListener( 'beforeunload', function () {
 				self.recordPageView();
 			} );
+			window.addEventListener( 'pagehide', function () {
+				self.recordPageView();
+				self.syncToServer();
+			} );
+
+			/*
+			 * Back from an outside form that identified them — a monday.com
+			 * form set to redirect to /thank-you/?leadkit_lead=volunteer, say.
+			 * The site cannot see inside the form, so this redirect is the one
+			 * reliable signal that they submitted it. The parameter is removed
+			 * from the address bar so a reload or a shared link does not
+			 * repeat it.
+			 */
+			try {
+				var q = new URLSearchParams( window.location.search );
+				var lead = q.get( LEAD_PARAM );
+				if ( lead ) {
+					this.markLead( lead );
+					q.delete( LEAD_PARAM );
+					var rest = q.toString();
+					if ( window.history && window.history.replaceState ) {
+						window.history.replaceState( null, '', window.location.pathname + ( rest ? '?' + rest : '' ) + window.location.hash );
+					}
+				}
+			} catch ( e ) {}
 
 			/*
 			 * Photographs viewed by advancing through a lightbox.
@@ -860,6 +957,7 @@
 					form.appendChild( hiddenInput );
 				}
 				hiddenInput.value = JSON.stringify( self.data );
+				self.markLead( form.getAttribute( 'data-leadkit-form' ) || 'leadkit-form' );
 			} );
 		}
 	}

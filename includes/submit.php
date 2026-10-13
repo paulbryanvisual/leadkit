@@ -148,6 +148,11 @@ function leadkit_handle_submit( $req ) {
 		$decoded = json_decode( $analytics, true );
 		update_post_meta( $post_id, '_leadkit_analytics', wp_json_encode( $decoded ?: $analytics, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 		leadkit_store_campaign( $post_id, is_array( $decoded ) ? $decoded : array() );
+		$vid = is_array( $decoded ) ? leadkit_clean_visitor_id( $decoded['id'] ?? '' ) : '';
+		if ( $vid ) {
+			// So a return visit by the same browser finds this lead.
+			update_post_meta( $post_id, '_leadkit_visitor_id', $vid );
+		}
 	}
 
 	// ---- then notify -----------------------------------------------------
