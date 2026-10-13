@@ -177,7 +177,13 @@ function leadkit_monday_form_shortcode( $atts ) {
 
 	$def = leadkit_monday_form_def( $token, $board );
 	if ( ! $def ) {
-		return current_user_can( 'edit_posts' ) ? '<p>' . esc_html__( 'LeadKit: could not load that monday.com form. Check the token, board and API token.', 'leadkit' ) . '</p>' : '';
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			return '';
+		}
+		$why = (string) get_option( 'leadkit_last_monday_error', '' );
+		return '<p>' . esc_html__( 'LeadKit: could not load that monday.com form. Check the form token, the board id and the API token.', 'leadkit' )
+			. ( $why ? '<br><strong>' . esc_html__( 'monday.com said:', 'leadkit' ) . '</strong> ' . esc_html( $why ) : '' )
+			. '<br><small>' . esc_html__( '(Only editors see this.)', 'leadkit' ) . '</small></p>';
 	}
 
 	// After the redirect back from leadkit/v1/monday.
@@ -567,9 +573,8 @@ function leadkit_monday_upload( $item_id, $column, $file ) {
 			'timeout' => 30,
 			'headers' => array(
 				'Authorization' => $token,
-				'API-Version'   => '2025-04',
 				'Content-Type'  => 'multipart/form-data; boundary=' . $boundary,
-			),
+			) + leadkit_monday_version_header(),
 			'body'    => $body,
 		)
 	);

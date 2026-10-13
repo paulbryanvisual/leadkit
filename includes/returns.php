@@ -323,6 +323,21 @@ function leadkit_days_text( $days ) {
 }
 
 /**
+ * The API-Version header, only when pinned.
+ *
+ * Unpinned, monday answers with its current version — which is what the forms
+ * API needs (an older pinned version, 2025-04, refused the form query). Pin
+ * with the leadkit/monday_api_version filter if a later change breaks
+ * something.
+ *
+ * @return array
+ */
+function leadkit_monday_version_header() {
+	$v = (string) apply_filters( 'leadkit/monday_api_version', '' );
+	return $v ? array( 'API-Version' => $v ) : array();
+}
+
+/**
  * Call the monday.com API.
  *
  * @param string $query     GraphQL.
@@ -341,8 +356,7 @@ function leadkit_monday( $query, $variables = array() ) {
 			'headers' => array(
 				'Authorization' => $token,
 				'Content-Type'  => 'application/json',
-				'API-Version'   => '2025-04',
-			),
+			) + leadkit_monday_version_header(),
 			'body'    => wp_json_encode( array( 'query' => $query, 'variables' => (object) $variables ) ),
 		)
 	);
