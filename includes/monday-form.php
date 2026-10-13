@@ -211,10 +211,10 @@ function leadkit_monday_form_shortcode( $atts ) {
 		}
 	}
 
-	$out .= '<input type="hidden" name="leadkit_form" value="' . esc_attr( $name ) . '">'
-		. '<input type="hidden" name="form_token" value="' . esc_attr( $token ) . '">'
-		. '<input type="hidden" name="board" value="' . esc_attr( $board ) . '">'
-		. '<div class="' . esc_attr( $p ) . '__hp" aria-hidden="true" style="position:absolute;left:-9999px"><input type="text" name="leadkit_hp" tabindex="-1" autocomplete="off"></div>';
+	$out .= '<input class="' . esc_attr( $p ) . '__hidden" type="hidden" name="leadkit_form" value="' . esc_attr( $name ) . '">'
+		. '<input class="' . esc_attr( $p ) . '__hidden" type="hidden" name="form_token" value="' . esc_attr( $token ) . '">'
+		. '<input class="' . esc_attr( $p ) . '__hidden" type="hidden" name="board" value="' . esc_attr( $board ) . '">'
+		. '<div class="' . esc_attr( $p ) . '__hp" aria-hidden="true" style="position:absolute;left:-9999px"><input class="' . esc_attr( $p ) . '__hp-input" type="text" name="leadkit_hp" tabindex="-1" autocomplete="off"></div>';
 
 	$req  = '<span class="' . esc_attr( $p ) . '__required" aria-hidden="true">*</span>';
 	$cls  = function ( $s ) use ( $p ) {
@@ -263,14 +263,14 @@ function leadkit_monday_form_shortcode( $atts ) {
 					. '<div class="' . $cls( '__options' ) . '">';
 				foreach ( $q['options'] as $i => $o ) {
 					// A single choice can carry `required` natively; a set of checkboxes cannot.
-					$out .= '<label class="' . $cls( '__option' ) . '"><input type="' . ( $multi ? 'checkbox' : 'radio' ) . '" name="' . esc_attr( $fname . ( $multi ? '[]' : '' ) ) . '" value="' . esc_attr( $o ) . '"' . ( ! $multi && $q['required'] && 0 === $i ? ' required' : '' ) . '> <span>' . esc_html( $o ) . '</span></label>';
+					$out .= '<label class="' . $cls( '__option' ) . '"><input class="' . $cls( $multi ? '__checkbox' : '__radio' ) . '" type="' . ( $multi ? 'checkbox' : 'radio' ) . '" name="' . esc_attr( $fname . ( $multi ? '[]' : '' ) ) . '" value="' . esc_attr( $o ) . '"' . ( ! $multi && $q['required'] && 0 === $i ? ' required' : '' ) . '> <span class="' . $cls( '__option-text' ) . '">' . esc_html( $o ) . '</span></label>';
 				}
 				$out .= '</div>' . $help . '</fieldset>';
 				break;
 
 			case 'Boolean':
 				$out .= '<div class="' . $cls( '__field' ) . ' ' . $cls( '__field--checkbox' ) . '">'
-					. '<label class="' . $cls( '__option' ) . '"><input type="checkbox" name="' . esc_attr( $fname ) . '" value="1"' . $r . '> <span>' . $label . '</span></label>'
+					. '<label class="' . $cls( '__option' ) . '"><input class="' . $cls( '__checkbox' ) . '" type="checkbox" name="' . esc_attr( $fname ) . '" value="1"' . $r . '> <span class="' . $cls( '__option-text' ) . '">' . $label . '</span></label>'
 					. $help . '</div>';
 				break;
 
