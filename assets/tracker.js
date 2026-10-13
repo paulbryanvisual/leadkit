@@ -479,13 +479,15 @@
 		 *   page_path              those pages in order, " > "
 		 *   page_detail            each page with active seconds and how far
 		 *                          they scrolled: /protect/ 45s 80% > …
+		 *   page_log               the same, each led by the UTC time they
+		 *                          arrived: 2026-10-13T02:58:04Z /protect/ 45s 80%
 		 *   time_on_site           active seconds across the visit
 		 *   photos_viewed          distinct photographs opened
 		 *   device                 mobile / tablet / desktop and width
 		 *   first_visit            date of the first visit (YYYY-MM-DD)
 		 *   visitor_id             LeadKit's id, to join with lead records
 		 */
-		formParams() {
+		formParams( full ) {
 			var self = this;
 			var d = this.data;
 			var out = {};
@@ -518,6 +520,7 @@
 				path: window.location.pathname,
 				active_time_ms: this.pageActiveTimeMs,
 				max_scroll_percent: this.maxScroll,
+				time: this.viewStartedAt,
 			} ] );
 
 			out.pages_viewed = String( views.length );
@@ -527,6 +530,13 @@
 			out.page_detail = this.joinCapped( views.map( function ( v ) {
 				return v.path + ' ' + Math.round( ( +v.active_time_ms || 0 ) / 1000 ) + 's ' + ( +v.max_scroll_percent || 0 ) + '%';
 			} ), DETAIL_MAX );
+			// The same, with the moment they arrived on each page (UTC).
+			// Uncapped when the form posts to LeadKit; capped in a URL.
+			var log = views.map( function ( v ) {
+				var at = v.time ? String( v.time ).slice( 0, 19 ) + 'Z' : '';
+				return ( at ? at + ' ' : '' ) + v.path + ' ' + Math.round( ( +v.active_time_ms || 0 ) / 1000 ) + 's ' + ( +v.max_scroll_percent || 0 ) + '%';
+			} );
+			out.page_log = full ? log.join( HISTORY_SEP ) : this.joinCapped( log, DETAIL_MAX );
 
 			var ms = views.reduce( function ( sum, v ) {
 				return sum + ( +v.active_time_ms || 0 );
@@ -968,7 +978,7 @@
 						tracking.name = 'tracking';
 						form.appendChild( tracking );
 					}
-					tracking.value = JSON.stringify( self.formParams() );
+					tracking.value = JSON.stringify( self.formParams( true ) );
 				}
 				self.markLead( form.getAttribute( 'data-leadkit-form' ) || 'leadkit-form' );
 			} );

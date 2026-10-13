@@ -505,6 +505,15 @@ function leadkit_handle_monday_form( $req ) {
 		update_post_meta( $post_id, '_leadkit_monday_board', $board );
 	}
 
+	// ---- the readable summary: Engagement, Source, Minutes, Pages, Journey ------
+	$summary_data = leadkit_journey_summary( is_array( $tracking ) ? $tracking : array(), is_array( $decoded ) ? $decoded : array() );
+	if ( $summary_data ) {
+		$scols = leadkit_monday_summary_columns( $board );
+		if ( $scols ) {
+			$values = leadkit_summary_values( $summary_data, $scols ) + $values;
+		}
+	}
+
 	// ---- then monday.com ----------------------------------------------------------
 	$group = $def['group'] ? ', group_id: $g' : '';
 	$vars  = array( 'b' => $board, 'n' => $item, 'v' => wp_json_encode( (object) $values ) );
@@ -520,6 +529,12 @@ function leadkit_handle_monday_form( $req ) {
 	if ( $item_id ) {
 		foreach ( $uploads as $col => $f ) {
 			leadkit_monday_upload( $item_id, $col, $f );
+		}
+		if ( $summary_data ) {
+			leadkit_monday(
+				'mutation ($i: ID!, $body: String!) { create_update(item_id: $i, body: $body) { id } }',
+				array( 'i' => $item_id, 'body' => leadkit_journey_update_html( $summary_data ) )
+			);
 		}
 		if ( $visitor ) {
 			// Prime the return-visit lookup so it does not have to search.

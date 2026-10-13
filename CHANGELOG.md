@@ -2,6 +2,16 @@
 
 ## 1.3.1
 
+- **Readable in monday.com.** Each item from `[leadkit_monday_form]` gets an
+  update, "How they got here": the campaign (and first campaign), an
+  Engagement level, and every page in order, grouped by day, with the time
+  they arrived, how long they stayed and how far they read. Plus columns that
+  sort and filter — Engagement (Hot / Warm / Browsing, LeadKit's lead
+  temperature), Source, Minutes on site, Pages — and Journey, the same list one
+  page per line. Columns are created the first time. A page reloaded straight
+  after itself counts once.
+- New tracking value `page_log`: `page_detail` with each page's arrival time
+  (UTC). Sent in full to LeadKit-rendered forms, capped in embedded-form URLs.
 - The tracker script is versioned by its file's modification time, so a
   changed tracker.js always reaches browsers and caching plugins. Through the
   1.3.0 work the URL stayed `?ver=1.3.0`, browsers and SiteGround Optimizer
