@@ -11,7 +11,8 @@
  *   { submitAction, syncUrl, trackUrl, storagePrefix, donationHosts, attributionDays }
  *
  * Campaigns: all five UTM fields are captured on every landing, the latest one
- * gets credit for 30 days, and it is stamped onto every donation link (Give
+ * keeps the credit until a newer one arrives (or for attributionDays, when a
+ * site sets a limit), and it is stamped onto every donation link (Give
  * Lively by default) packed into utm_source, the only field Give Lively keeps.
  * window.LeadKitAnalytics.attribution() / .packedSource() expose the same to
  * other scripts on the page.
@@ -34,8 +35,9 @@
 	var GOOGLE_CLICK_IDS = [ 'gclid', 'gbraid', 'wbraid' ];
 	var SEARCH_ENGINES = [ 'google', 'bing', 'duckduckgo', 'yahoo', 'ecosia', 'baidu', 'yandex' ];
 	var PACK_SEP = '__';
-	var MAX_TOUCHES = 10;
-	var ATTRIBUTION_DAYS = parseInt( cfg.attributionDays, 10 ) > 0 ? parseInt( cfg.attributionDays, 10 ) : 30;
+	// 0 = no expiry: the latest campaign keeps the credit for as long as the
+	// browser keeps the data. A positive number is a window in days.
+	var ATTRIBUTION_DAYS = parseInt( cfg.attributionDays, 10 ) > 0 ? parseInt( cfg.attributionDays, 10 ) : 0;
 	var DONATION_HOSTS = ( Array.isArray( cfg.donationHosts ) ? cfg.donationHosts : [ 'givelively.org' ] )
 		.map( function ( h ) {
 			return String( h ).trim().toLowerCase().replace( /^https?:\/\//, '' ).replace( /\/.*$/, '' );
@@ -73,12 +75,39 @@
 			};
 		}
 
+		/*
+		 * Campaign touches are kept with no cap, so in principle storage can
+		 * fill. When it does, the oldest MIDDLE touches go first (the first
+		 * touch and the latest are what credit is built on), then the oldest
+		 * page views — rather than failing to save anything at all.
+		 */
 		saveData() {
-			try {
-				localStorage.setItem( this.sessionKey, JSON.stringify( this.data ) );
-			} catch ( e ) {
-				console.error( 'Analytics save error', e );
+			for ( var attempt = 0; attempt < 6; attempt++ ) {
+				try {
+					localStorage.setItem( this.sessionKey, JSON.stringify( this.data ) );
+					return;
+				} catch ( e ) {
+					if ( ! this.shrinkData() ) {
+						console.error( 'Analytics save error', e );
+						return;
+					}
+				}
 			}
+		}
+
+		shrinkData() {
+			var t = this.data.utm_touches;
+			if ( t && t.length > 2 ) {
+				var drop = Math.max( 1, Math.floor( ( t.length - 2 ) / 2 ) );
+				t.splice( 1, drop );
+				return true;
+			}
+			var v = this.data.page_views;
+			if ( v && v.length > 20 ) {
+				v.splice( 0, Math.floor( v.length / 2 ) );
+				return true;
+			}
+			return false;
 		}
 
 		syncToServer() {
@@ -159,7 +188,8 @@
 		 *   utm         — the latest campaign (same key as before, so the email
 		 *                 template and any existing endpoint still read it)
 		 *   utm_first   — the first campaign ever, kept for the full story
-		 *   utm_touches — every distinct campaign touch, newest last, capped
+		 *   utm_touches — every distinct campaign touch, newest last, kept for as
+		 *                 long as the browser keeps the data
 		 * A reload of the same URL is not a new touch.
 		 */
 		captureCampaign() {
@@ -215,7 +245,7 @@
 
 			var last = this.data.utm_touches[ this.data.utm_touches.length - 1 ];
 			if ( this.sameCampaign( last, touch ) && this.sameCampaign( this.data.utm, touch ) ) {
-				// Same link again: refresh the clock so the 30 days run from now.
+				// Same link again: refresh the clock (matters when a window is set).
 				this.data.utm.time = touch.time;
 				last.time = touch.time;
 				this.saveData();
@@ -227,23 +257,21 @@
 				this.data.utm_first = touch;
 			}
 			this.data.utm_touches.push( touch );
-			if ( this.data.utm_touches.length > MAX_TOUCHES ) {
-				this.data.utm_touches = this.data.utm_touches.slice( -MAX_TOUCHES );
-			}
 			this.saveData();
 		}
 
 		/**
 		 * The campaign that should get credit right now, or null.
 		 *
-		 * The latest touch, while it is younger than the attribution window.
-		 * A touch with no time (stored by 1.2.x) never expires — there is no way
-		 * to know its age, and dropping it would lose real attribution.
+		 * The latest touch. By default it never expires: it keeps the credit
+		 * until a newer campaign replaces it or the browser clears its storage.
+		 * A site can set a window in days; a touch with no time (stored by
+		 * 1.2.x) never expires even then, since its age is unknown.
 		 */
 		attribution() {
 			var t = this.data.utm;
 			if ( ! this.hasCampaign( t ) ) return null;
-			if ( t.time ) {
+			if ( ATTRIBUTION_DAYS && t.time ) {
 				var age = Date.now() - Date.parse( t.time );
 				if ( age > ATTRIBUTION_DAYS * 864e5 ) return null;
 			}

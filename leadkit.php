@@ -62,7 +62,7 @@ function leadkit_options() {
 		'from_name'         => '',
 		'storage_prefix'    => 'leadkit',
 		'donation_hosts'    => 'givelively.org',
-		'attribution_days'  => '30',
+		'attribution_days'  => '0',
 	);
 
 	$opts = get_option( 'leadkit_options', array() );
@@ -146,7 +146,7 @@ add_action(
 					'trackUrl'      => $opts['track_url'],
 					'storagePrefix'   => $opts['storage_prefix'],
 					'donationHosts'   => array_values( array_filter( array_map( 'trim', explode( ',', (string) $opts['donation_hosts'] ) ) ) ),
-					'attributionDays' => max( 1, (int) $opts['attribution_days'] ),
+					'attributionDays' => max( 0, (int) $opts['attribution_days'] ),
 				)
 			) . ';',
 			'before'

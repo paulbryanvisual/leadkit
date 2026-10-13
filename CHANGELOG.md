@@ -14,8 +14,10 @@ field, `utm_source`, and drops the rest.
 - **Latest campaign gets the credit.** The tracker kept the first source
   forever, so a December gift was credited to whatever brought the visitor in
   last spring. Now `utm` is the latest campaign, `utm_first` the first, and
-  `utm_touches` the last 10 distinct touches. Credit lasts 30 days
-  (Settings → LeadKit → Campaign credit); a newer campaign replaces it sooner.
+  `utm_touches` every distinct touch, with no cap. The latest campaign keeps
+  the credit until a newer one arrives or the browser clears its storage; a
+  site can set a window in days instead (Settings → LeadKit → Campaign
+  credit). If storage ever fills, the oldest middle touches are trimmed first.
   Sessions stored by 1.2.x are migrated: their one source becomes the first touch.
 - **Donation links carry the campaign.** Every link to a donation host
   (`givelively.org` by default; Settings → LeadKit → Donation hosts) gets the

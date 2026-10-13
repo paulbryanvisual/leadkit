@@ -68,8 +68,8 @@ campaign credited when the visitor came back from the donation host).
   which is useful for local layout parity.
 * Donation hosts — comma-separated domains whose links get the visitor's
   campaign (default givelively.org; subdomains match). Empty turns it off.
-* Campaign credit (days) — how long the latest campaign keeps the credit
-  (default 30).
+* Campaign credit (days) — how long the latest campaign keeps the credit.
+  0 (default) = for as long as the visitor's browser keeps the data.
 * Storage prefix for the localStorage keys, in case two projects share a
   domain during development.
 
@@ -81,8 +81,9 @@ moving an existing site onto the plugin needs no re-typing.
 
 = 1.3.0 =
 * Captures all five UTM fields plus Google Ads click IDs.
-* The latest campaign gets the credit for 30 days; the first campaign and the
-  last 10 touches are kept too. 1.2.x sessions are migrated.
+* The latest campaign keeps the credit for as long as the browser keeps the
+  data (or a window you set); the first campaign and every touch are kept too.
+  1.2.x sessions are migrated.
 * Donation links (Give Lively by default) carry the visitor's campaign packed
   into utm_source, the one field Give Lively keeps.
 * Returns from the donation form are logged with their campaign.

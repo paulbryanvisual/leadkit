@@ -106,7 +106,7 @@ add_action(
 							$h = preg_replace( '#^https?://#', '', $h );
 							return preg_replace( '/[^a-z0-9.-]/', '', strtok( $h, '/' ) ?: '' );
 						}, explode( ',', (string) ( $raw['donation_hosts'] ?? '' ) ) ) ) ),
-						'attribution_days'  => (string) max( 1, min( 365, (int) ( $raw['attribution_days'] ?? 30 ) ?: 30 ) ),
+						'attribution_days'  => (string) max( 0, min( 3650, (int) ( $raw['attribution_days'] ?? 0 ) ) ),
 					);
 				},
 			)
@@ -137,7 +137,7 @@ function leadkit_render_settings_page() {
 		'turnstile_hostnames' => array( __( 'Extra Turnstile hostnames', 'leadkit' ), __( 'Comma-separated, ADDED to this site’s own hostname, which is always accepted. Only add hosts you serve the form from. Never add localhost here on a production site — a token solved anywhere would then be accepted, which is the check gone.', 'leadkit' ) ),
 		'turnstile_fail_open' => array( __( 'Accept if Cloudflare is unreachable', 'leadkit' ), __( 'Off (recommended): a submission is refused when Turnstile cannot be reached. On: it is accepted unverified — fewer lost enquiries during a Cloudflare outage, but an attacker who can block that call turns the check off.', 'leadkit' ), 'checkbox' ),
 		'donation_hosts'    => array( __( 'Donation hosts', 'leadkit' ), __( 'Comma-separated domains whose links get the visitor’s campaign added, packed into utm_source as medium__source__campaign__content. Subdomains match, so givelively.org covers secure.givelively.org. Add data-leadkit-keep to a link to leave it alone. Empty turns stamping off.', 'leadkit' ) ),
-		'attribution_days'  => array( __( 'Campaign credit (days)', 'leadkit' ), __( 'How long the latest campaign link a visitor arrived from keeps the credit. A newer campaign always replaces it sooner. Default 30.', 'leadkit' ) ),
+		'attribution_days'  => array( __( 'Campaign credit (days)', 'leadkit' ), __( 'How long the latest campaign link a visitor arrived from keeps the credit. 0 (the default) means for as long as their browser keeps the data; a newer campaign always replaces it. Every campaign touch is kept either way.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
 	?>
