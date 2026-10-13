@@ -570,6 +570,10 @@ function leadkit_handle_monday_form( $req ) {
 				array( 'i' => $item_id, 'body' => leadkit_journey_update_html( $summary_data ) )
 			);
 		}
+		if ( $summary_data ) {
+			// A subitem per page, with a screenshot — after the visitor is answered.
+			leadkit_monday_queue_stops( $item_id, $board, $summary_data );
+		}
 		if ( $visitor ) {
 			// Prime the return-visit lookup so it does not have to search.
 			$key   = leadkit_visitor_key( $visitor );

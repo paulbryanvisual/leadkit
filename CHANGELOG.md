@@ -5,6 +5,21 @@
 - With a People board, submissions are named by date and form
   ("Oct 12, 2026 9:58 pm · Volunteer Inquiry"), so a person's "Form
   submissions" list reads as a timeline; the name goes in a Name column.
+- **Every page as a subitem.** Each `[leadkit_monday_form]` submission gets a
+  subitem per stop of the journey, in order ("3 · Volunteer Inquiry"), with
+  Step, Page, Arrived (date and time), Seconds on page, Time on page, Read %,
+  Loads and a Screenshot. Columns are created on the subitems board the first
+  time. All the subitems go in one request per 20 stops, and the work runs
+  after the visitor has been answered, so the form never waits on it. Numbers
+  that were text before can now be charted: time on each page across everyone.
+  Off with `add_filter( 'leadkit/monday_stops', '__return_false' )`.
+- **Screenshot of each page.** Captured once per page (WordPress.com's public
+  mShots service by default; `leadkit/screenshot_source` swaps it), cached a
+  week in `uploads/leadkit-shots`, and shown with a gauge beside it filled to
+  how far this visitor read, plus their time on the page. Pages that return an
+  error are skipped rather than captured as the theme's 404 screen. At most 20
+  per submission and 90 seconds of capturing; the next submission fills in
+  pages still being captured. Off with `leadkit/monday_stop_screenshots`.
 - **People and their submissions.** Set a **monday.com People board** and each
   person gets one row there, matched by email, the way Salesforce has a
   Contact with records related to it. Every `[leadkit_monday_form]` submission
