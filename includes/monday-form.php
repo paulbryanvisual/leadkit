@@ -300,6 +300,18 @@ function leadkit_monday_form_shortcode( $atts ) {
 	$out .= '<div class="' . $cls( '__actions' ) . '"><button class="' . $cls( '__submit' ) . '" type="submit">' . esc_html( $atts['submit_text'] ) . '</button></div>'
 		. '</form>';
 
+	/*
+	 * A browser can require one radio button but not "at least one of these
+	 * checkboxes", so without this a missed group made the server send the
+	 * page back with every answer gone. This stops the submit in the browser
+	 * instead and points at the group, the way it does for any other field.
+	 */
+	$out .= '<script>(function(){var f=document.getElementById(' . wp_json_encode( $id ) . ');if(!f)return;'
+		. 'function groups(){return f.querySelectorAll("fieldset[data-required]");}'
+		. 'f.addEventListener("change",function(e){var g=e.target.closest&&e.target.closest("fieldset[data-required]");if(g){g.querySelectorAll("input").forEach(function(i){i.setCustomValidity("");});}});'
+		. 'f.addEventListener("submit",function(e){var bad=null;groups().forEach(function(g){var boxes=g.querySelectorAll("input[type=checkbox]");if(!boxes.length)return;var any=Array.prototype.some.call(boxes,function(b){return b.checked;});boxes[0].setCustomValidity(any?"":' . wp_json_encode( __( 'Please choose at least one option.', 'leadkit' ) ) . ');if(!any&&!bad)bad=boxes[0];});'
+		. 'if(bad){e.preventDefault();e.stopImmediatePropagation();bad.reportValidity();}},true);})();</script>';
+
 	return $out;
 }
 
@@ -468,11 +480,14 @@ function leadkit_handle_monday_form( $req ) {
 	$analytics = (string) $req->get_param( 'analyticsData' );
 	$decoded   = json_decode( $analytics, true );
 	$visitor   = is_array( $decoded ) ? leadkit_clean_visitor_id( $decoded['id'] ?? '' ) : '';
-	$email     = '';
+	$email = '';
+	$phone = '';
 	foreach ( $values as $v ) {
-		if ( is_array( $v ) && isset( $v['email'] ) ) {
+		if ( is_array( $v ) && isset( $v['email'] ) && ! $email ) {
 			$email = $v['email'];
-			break;
+		}
+		if ( is_array( $v ) && isset( $v['phone'] ) && ! $phone ) {
+			$phone = $v['phone'];
 		}
 	}
 
@@ -487,6 +502,7 @@ function leadkit_handle_monday_form( $req ) {
 	if ( ! is_wp_error( $post_id ) ) {
 		update_post_meta( $post_id, '_leadkit_name', $item );
 		update_post_meta( $post_id, '_leadkit_email', $email );
+		update_post_meta( $post_id, '_leadkit_phone', $phone );
 		update_post_meta( $post_id, '_leadkit_project_type', $def['title'] );
 		update_post_meta(
 			$post_id,

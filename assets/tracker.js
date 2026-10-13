@@ -297,6 +297,19 @@
 			} catch ( e ) {}
 
 			var touch = this.getUtmParams();
+
+			/*
+			 * A link from this same site that happens to carry UTMs (a /givingtuesday
+			 * redirect built for a Facebook post, say) is not a new campaign — the
+			 * visitor was already here. Counting it would hand their credit to
+			 * whatever campaign that internal link was tagged with.
+			 */
+			try {
+				if ( this.hasCampaign( touch ) && document.referrer && new URL( document.referrer ).host === window.location.host ) {
+					touch = {};
+				}
+			} catch ( e ) {}
+
 			if ( ! this.hasCampaign( touch ) ) {
 				if ( changed ) this.saveData();
 				return;

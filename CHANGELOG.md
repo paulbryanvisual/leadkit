@@ -2,6 +2,16 @@
 
 ## 1.3.1
 
+- **After submitting.** Pages viewed in the 30 minutes after someone submits
+  are kept and shown as "After submitting" in the return-visits log on the
+  monday item and the LeadKit lead — someone who volunteers and then goes
+  straight to Donate is worth knowing about. They never trigger a "came back"
+  update or email; only later visits do.
+- Missing a required checkbox group is caught in the browser, which points at
+  the group, instead of a round trip that sent the page back empty.
+- The phone number is saved on the LeadKit lead for monday forms.
+- A link from the site to itself that carries UTMs (an internal redirect
+  tagged for a social post) no longer counts as a new campaign touch.
 - **Readable in monday.com.** Each item from `[leadkit_monday_form]` gets an
   update, "How they got here": the campaign (and first campaign), an
   Engagement level, and every page in order, grouped by day, with the time

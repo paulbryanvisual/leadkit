@@ -187,9 +187,12 @@ add_action(
 				echo '</tbody></table>';
 
 				$returns = json_decode( (string) get_post_meta( $post->ID, '_leadkit_return_visits', true ), true );
-				if ( is_array( $returns ) && $returns ) {
-					echo '<h2 style="margin:1.2em 0 .5em;font-size:14px">' . esc_html__( 'Came back', 'leadkit' ) . '</h2>';
-					echo '<div style="white-space:pre-wrap;background:#f0f6fc;padding:1rem;border:1px solid #c5d9ed">' . esc_html( leadkit_days_text( $returns ) ) . '</div>';
+				$after   = json_decode( (string) get_post_meta( $post->ID, '_leadkit_after_submit', true ), true );
+				if ( ( is_array( $returns ) && $returns ) || ( is_array( $after ) && $after ) ) {
+					$returns = is_array( $returns ) ? $returns : array();
+					$after   = is_array( $after ) ? $after : array();
+					echo '<h2 style="margin:1.2em 0 .5em;font-size:14px">' . esc_html__( 'After submitting, and when they came back', 'leadkit' ) . '</h2>';
+					echo '<div style="white-space:pre-wrap;background:#f0f6fc;padding:1rem;border:1px solid #c5d9ed">' . esc_html( leadkit_days_text( $returns, $after ) ) . '</div>';
 				}
 
 				echo '<p><strong>' . esc_html__( 'Message', 'leadkit' ) . '</strong></p>';
