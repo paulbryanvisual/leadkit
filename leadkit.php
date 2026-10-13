@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.2.1
+ * Version:           1.3.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan Visual
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.2.1' );
+define( 'LEADKIT_VERSION', '1.3.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -42,7 +42,7 @@ require_once LEADKIT_DIR . '/includes/submit.php';
 /**
  * One option, one array — portable and easy to export between installs.
  *
- * @return array{submit_url:string,sync_url:string,track_url:string,turnstile_sitekey:string,storage_prefix:string}
+ * @return array{submit_url:string,sync_url:string,track_url:string,turnstile_sitekey:string,storage_prefix:string,donation_hosts:string,attribution_days:string}
  */
 function leadkit_options() {
 	$defaults = array(
@@ -61,6 +61,8 @@ function leadkit_options() {
 		'from_email'        => '',
 		'from_name'         => '',
 		'storage_prefix'    => 'leadkit',
+		'donation_hosts'    => 'givelively.org',
+		'attribution_days'  => '30',
 	);
 
 	$opts = get_option( 'leadkit_options', array() );
@@ -142,7 +144,9 @@ add_action(
 					'submitAction'  => $opts['submit_url'],
 					'syncUrl'       => $opts['sync_url'],
 					'trackUrl'      => $opts['track_url'],
-					'storagePrefix' => $opts['storage_prefix'],
+					'storagePrefix'   => $opts['storage_prefix'],
+					'donationHosts'   => array_values( array_filter( array_map( 'trim', explode( ',', (string) $opts['donation_hosts'] ) ) ) ),
+					'attributionDays' => max( 1, (int) $opts['attribution_days'] ),
 				)
 			) . ';',
 			'before'

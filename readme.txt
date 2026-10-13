@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.3.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -24,7 +24,9 @@ Two pieces, one plugin:
 
 * **The visitor tracker** — first-party behavioural context kept in
   localStorage: page views, active time per page, max scroll depth, photo
-  clicks, rage clicks, UTM capture. Nothing is sent for anonymous visitors.
+  clicks, rage clicks, campaign (UTM) touches. Nothing is sent for anonymous
+  visitors. The latest campaign is stamped onto donation links (Give Lively by
+  default), packed into utm_source as medium__source__campaign__content.
   The session attaches to the lead at the moment one identifies themself: it is
   injected into the form as a hidden `analyticsData` field on submit, and the
   first `tel:` or `mailto:` click posts it with the interaction. After that,
@@ -48,9 +50,15 @@ identifying click:
 
 `sync_url` (default `/api/sync-lead`) — JSON POST on visibility change for
 known leads:
-  { "analyticsData": { id, device, utm, page_views: [ { path, active_time_ms,
-    max_scroll_percent, time } ], events: [ { type, value, time, path } ],
-    started_at } }
+  { "analyticsData": { id, device, utm, utm_first, utm_touches, referrer,
+    page_views: [ { path, active_time_ms, max_scroll_percent, time } ],
+    events: [ { type, value, time, path } ], started_at } }
+
+A campaign touch (`utm`, `utm_first`, each of `utm_touches`) is
+  { source, medium, campaign, content, term, click_id?, landing, time }
+`utm` is the latest touch; sessions from 1.2.x carry only source / medium /
+campaign in it. Event types include `donation_return` (value = the packed
+campaign credited when the visitor came back from the donation host).
 
 == Settings ==
 
@@ -58,6 +66,10 @@ known leads:
 * Turnstile site key — empty renders the form without the widget. Cloudflare's
   testing key `1x00000000000000000000AA` renders a dummy widget on any domain,
   which is useful for local layout parity.
+* Donation hosts — comma-separated domains whose links get the visitor's
+  campaign (default givelively.org; subdomains match). Empty turns it off.
+* Campaign credit (days) — how long the latest campaign keeps the credit
+  (default 30).
 * Storage prefix for the localStorage keys, in case two projects share a
   domain during development.
 
@@ -66,6 +78,16 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.3.0 =
+* Captures all five UTM fields plus Google Ads click IDs.
+* The latest campaign gets the credit for 30 days; the first campaign and the
+  last 10 touches are kept too. 1.2.x sessions are migrated.
+* Donation links (Give Lively by default) carry the visitor's campaign packed
+  into utm_source, the one field Give Lively keeps.
+* Returns from the donation form are logged with their campaign.
+* Leads list has a Campaign column; campaign fields are stored as lead meta and
+  shown in the notification email.
 
 = 1.2.1 =
 * The repository is public, so updates need no authentication. The GitHub token

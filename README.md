@@ -15,7 +15,9 @@ with `[leadkit_form]` or, from a theme, `leadkit_form( array( 'class_prefix' =>
 design rather than importing its own.
 
 **The tracker.** First-party, no third-party script, attaching behavioural
-context to each lead.
+context to each lead — including every campaign (UTM) touch. The latest
+campaign is stamped onto donation links, packed into `utm_source` as
+`medium__source__campaign__content`, because Give Lively keeps only that field.
 
 ## The server side is not in here
 

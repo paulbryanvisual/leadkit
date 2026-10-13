@@ -81,6 +81,7 @@ add_filter(
 			'leadkit_phone' => __( 'Phone', 'leadkit' ),
 			'leadkit_type'  => __( 'Project', 'leadkit' ),
 			'leadkit_msg'   => __( 'Message', 'leadkit' ),
+			'leadkit_utm'   => __( 'Campaign', 'leadkit' ),
 			'leadkit_sent'  => __( 'Notified', 'leadkit' ),
 			'date'          => __( 'Received', 'leadkit' ),
 		);
@@ -105,6 +106,24 @@ add_action(
 			case 'leadkit_msg':
 				$m = (string) get_post_meta( $post_id, '_leadkit_message', true );
 				echo esc_html( mb_strimwidth( $m, 0, 90, '…' ) );
+				break;
+			case 'leadkit_utm':
+				/*
+				 * Campaign, then the piece (email-1, post-3) underneath — the
+				 * two things anyone scanning this list asks.
+				 */
+				$camp = (string) get_post_meta( $post_id, '_leadkit_utm_campaign', true );
+				$src  = trim( (string) get_post_meta( $post_id, '_leadkit_utm_medium', true ) . ' / ' . (string) get_post_meta( $post_id, '_leadkit_utm_source', true ), ' /' );
+				$cont = (string) get_post_meta( $post_id, '_leadkit_utm_content', true );
+				if ( ! $camp && ! $src ) {
+					echo '—';
+					break;
+				}
+				echo esc_html( $camp ?: $src );
+				$sub = array_filter( array( $camp ? $src : '', $cont ) );
+				if ( $sub ) {
+					echo '<br><small>' . esc_html( implode( ' · ', $sub ) ) . '</small>';
+				}
 				break;
 			case 'leadkit_sent':
 				/*
@@ -147,6 +166,13 @@ add_action(
 					__( 'Project', 'leadkit' ) => get_post_meta( $post->ID, '_leadkit_project_type', true ),
 					__( 'Page', 'leadkit' )    => get_post_meta( $post->ID, '_leadkit_source_url', true ),
 					__( 'IP', 'leadkit' )      => get_post_meta( $post->ID, '_leadkit_ip', true ),
+					__( 'Campaign', 'leadkit' ) => get_post_meta( $post->ID, '_leadkit_utm_packed', true ),
+					__( 'First came from', 'leadkit' ) => leadkit_pack_campaign( array(
+						'medium'   => get_post_meta( $post->ID, '_leadkit_utm_first_medium', true ),
+						'source'   => get_post_meta( $post->ID, '_leadkit_utm_first_source', true ),
+						'campaign' => get_post_meta( $post->ID, '_leadkit_utm_first_campaign', true ),
+						'content'  => get_post_meta( $post->ID, '_leadkit_utm_first_content', true ),
+					) ),
 				);
 				echo '<table class="widefat striped"><tbody>';
 				foreach ( $rows as $label => $value ) {

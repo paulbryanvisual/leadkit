@@ -145,7 +145,9 @@ function leadkit_handle_submit( $req ) {
 	update_post_meta( $post_id, '_leadkit_source_url', esc_url_raw( $referer ) );
 	update_post_meta( $post_id, '_leadkit_ip', $ip );
 	if ( $analytics ) {
-		update_post_meta( $post_id, '_leadkit_analytics', wp_json_encode( json_decode( $analytics, true ) ?: $analytics, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		$decoded = json_decode( $analytics, true );
+		update_post_meta( $post_id, '_leadkit_analytics', wp_json_encode( $decoded ?: $analytics, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
+		leadkit_store_campaign( $post_id, is_array( $decoded ) ? $decoded : array() );
 	}
 
 	// ---- then notify -----------------------------------------------------
@@ -485,4 +487,63 @@ function leadkit_answer( $req, $ok, $message, $referer ) {
 	$res = new WP_REST_Response( null, 303 );
 	$res->header( 'Location', $url . '#leadkit-message' );
 	return $res;
+}
+
+/**
+ * The campaign on its own meta keys, so leads can be listed, sorted and
+ * exported by campaign without unpacking the analytics JSON.
+ *
+ * `_leadkit_utm_*` is the touch that had the credit at submission (the latest
+ * one); `_leadkit_utm_first_*` is where the visitor first came from. The
+ * packed value matches what the tracker writes onto Give Lively links, so a
+ * form lead and a donation from the same campaign line up in a report.
+ *
+ * @param int   $post_id   Lead post ID.
+ * @param array $analytics Decoded analyticsData.
+ * @return void
+ */
+function leadkit_store_campaign( $post_id, $analytics ) {
+	$keys = array( 'source', 'medium', 'campaign', 'content', 'term' );
+
+	foreach ( array(
+		'_leadkit_utm_'       => $analytics['utm'] ?? array(),
+		'_leadkit_utm_first_' => $analytics['utm_first'] ?? array(),
+	) as $prefix => $touch ) {
+		if ( ! is_array( $touch ) ) {
+			continue;
+		}
+		foreach ( $keys as $k ) {
+			$v = sanitize_text_field( (string) ( $touch[ $k ] ?? '' ) );
+			if ( '' !== $v ) {
+				update_post_meta( $post_id, $prefix . $k, $v );
+			}
+		}
+	}
+
+	$packed = leadkit_pack_campaign( is_array( $analytics['utm'] ?? null ) ? $analytics['utm'] : array() );
+	if ( '' !== $packed ) {
+		update_post_meta( $post_id, '_leadkit_utm_packed', $packed );
+	}
+}
+
+/**
+ * medium__source__campaign__content[__term] — the same packing as tracker.js.
+ *
+ * @param array $touch One campaign touch.
+ * @return string Empty when the touch has no campaign at all.
+ */
+function leadkit_pack_campaign( $touch ) {
+	$parts = array();
+	foreach ( array( 'medium', 'source', 'campaign', 'content', 'term' ) as $k ) {
+		$v       = strtolower( (string) ( $touch[ $k ] ?? '' ) );
+		$v       = trim( preg_replace( '/[^a-z0-9.-]+/', '-', $v ), '-' );
+		$parts[] = $v;
+	}
+	while ( $parts && '' === end( $parts ) ) {
+		array_pop( $parts );
+	}
+	if ( ! $parts ) {
+		return '';
+	}
+	return implode( '__', array_map( fn( $p ) => '' === $p ? 'none' : $p, $parts ) );
 }

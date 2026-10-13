@@ -467,14 +467,42 @@ function leadkit_render_journey( $analytics ) {
 			. '</td></tr>';
 	}
 
-	$utm = isset( $analytics['utm'] ) && is_array( $analytics['utm'] ) ? array_filter( $analytics['utm'] ) : array();
-	if ( $utm ) {
-		$bits = array();
-		foreach ( $utm as $k => $v ) {
-			$bits[] = esc_html( $k . ': ' . $v );
+	/*
+	 * Campaign: the one with the credit, then — only when it differs — where
+	 * they first came from, and how many campaigns touched them in between.
+	 * Only the five UTM fields are printed; the tracker's bookkeeping (time,
+	 * landing page, click id) is not something a reader of this email needs.
+	 */
+	$touch_line = function ( $t ) {
+		if ( ! is_array( $t ) ) {
+			return '';
 		}
+		$bits = array();
+		foreach ( array( 'campaign', 'medium', 'source', 'content', 'term' ) as $k ) {
+			if ( ! empty( $t[ $k ] ) && is_scalar( $t[ $k ] ) ) {
+				$bits[] = $k . ': ' . $t[ $k ];
+			}
+		}
+		return implode( ' · ', $bits );
+	};
+
+	$latest = $touch_line( $analytics['utm'] ?? null );
+	$first  = $touch_line( $analytics['utm_first'] ?? null );
+	$count  = is_array( $analytics['utm_touches'] ?? null ) ? count( $analytics['utm_touches'] ) : 0;
+
+	if ( $latest ) {
 		$out .= '<tr><td style="padding:6px 0 0;font-size:12px;color:' . $muted . '">'
-			. esc_html__( 'Campaign — ', 'leadkit' ) . implode( ' · ', $bits ) . '</td></tr>';
+			. esc_html__( 'Campaign — ', 'leadkit' ) . esc_html( $latest ) . '</td></tr>';
+	}
+	if ( $first && $first !== $latest ) {
+		$out .= '<tr><td style="padding:2px 0 0;font-size:12px;color:' . $muted . '">'
+			. esc_html__( 'First came from — ', 'leadkit' ) . esc_html( $first )
+			/* translators: %d: number of campaign links the visitor arrived from. */
+			. ( $count > 1 ? esc_html( sprintf( __( ' · %d campaign visits in all', 'leadkit' ), $count ) ) : '' )
+			. '</td></tr>';
+	} elseif ( ! $latest && ! empty( $analytics['referrer'] ) && is_scalar( $analytics['referrer'] ) ) {
+		$out .= '<tr><td style="padding:6px 0 0;font-size:12px;color:' . $muted . '">'
+			. esc_html__( 'Came from — ', 'leadkit' ) . esc_html( (string) $analytics['referrer'] ) . '</td></tr>';
 	}
 
 	$out .= '</table>';

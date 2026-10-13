@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.3.0
+
+Campaign tracking that survives the trip to a donation form. Built for the
+3Strands "Light the Path" appeal, where the question is which email or post a
+gift came from, and the gift happens on Give Lively — which keeps one tracking
+field, `utm_source`, and drops the rest.
+
+- **All five UTM fields.** `utm_content` and `utm_term` were never read, and
+  `utm_content` is the one that says WHICH email or post. Google Ads click IDs
+  (`gclid`, `gbraid`, `wbraid`) count as a paid-search touch when a click
+  arrives with no UTMs, which Ad Grant auto-tagging often does.
+- **Latest campaign gets the credit.** The tracker kept the first source
+  forever, so a December gift was credited to whatever brought the visitor in
+  last spring. Now `utm` is the latest campaign, `utm_first` the first, and
+  `utm_touches` the last 10 distinct touches. Credit lasts 30 days
+  (Settings → LeadKit → Campaign credit); a newer campaign replaces it sooner.
+  Sessions stored by 1.2.x are migrated: their one source becomes the first touch.
+- **Donation links carry the campaign.** Every link to a donation host
+  (`givelively.org` by default; Settings → LeadKit → Donation hosts) gets the
+  campaign packed into `utm_source` as `medium__source__campaign__content`,
+  e.g. `email__mailchimp__light-the-path__email-1`. Rewritten on load, on
+  links added later, and again at the moment of the click. Give Lively widgets
+  (`data-widget-src`) and donation iframes are covered too. With no campaign
+  the source still says something: `organic__google.com`, `referral__<host>`
+  or `direct__website`. Opt a link out with `data-leadkit-keep`.
+- **Donation returns are logged.** A page reached from the donation host (the
+  thank-you redirect) records a `donation_return` event with the credited
+  campaign and fires `leadkit:donation-return` on `document`.
+- **Leads show their campaign.** A Campaign column on the Leads list, campaign
+  and first-touch rows on the lead, `_leadkit_utm_*` / `_leadkit_utm_first_*` /
+  `_leadkit_utm_packed` meta for export, and the notification email now shows
+  the campaign with the credit and, when different, where they first came from.
+- `window.LeadKitAnalytics.attribution()` and `.packedSource()` for other
+  scripts on the page.
+
 ## 1.2.1
 
 The repository is public now, so updates need no authentication and the token

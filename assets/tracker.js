@@ -8,7 +8,13 @@
  * is sent for anonymous visitors except that first identifying interaction.
  *
  * Configuration arrives via window.LeadKitCfg (printed by the plugin):
- *   { submitAction, syncUrl, trackUrl, storagePrefix }
+ *   { submitAction, syncUrl, trackUrl, storagePrefix, donationHosts, attributionDays }
+ *
+ * Campaigns: all five UTM fields are captured on every landing, the latest one
+ * gets credit for 30 days, and it is stamped onto every donation link (Give
+ * Lively by default) packed into utm_source, the only field Give Lively keeps.
+ * window.LeadKitAnalytics.attribution() / .packedSource() expose the same to
+ * other scripts on the page.
  */
 (function () {
 	'use strict';
@@ -22,6 +28,19 @@
 	var SYNC_URL = cfg.syncUrl || '/api/sync-lead';
 	var TRACK_URL = cfg.trackUrl || '/api/track-interaction';
 	var SUBMIT_ACTION = cfg.submitAction || '/api/submit';
+
+	var UTM_KEYS = [ 'source', 'medium', 'campaign', 'content', 'term' ];
+	var CLICK_IDS = [ 'gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid' ];
+	var GOOGLE_CLICK_IDS = [ 'gclid', 'gbraid', 'wbraid' ];
+	var SEARCH_ENGINES = [ 'google', 'bing', 'duckduckgo', 'yahoo', 'ecosia', 'baidu', 'yandex' ];
+	var PACK_SEP = '__';
+	var MAX_TOUCHES = 10;
+	var ATTRIBUTION_DAYS = parseInt( cfg.attributionDays, 10 ) > 0 ? parseInt( cfg.attributionDays, 10 ) : 30;
+	var DONATION_HOSTS = ( Array.isArray( cfg.donationHosts ) ? cfg.donationHosts : [ 'givelively.org' ] )
+		.map( function ( h ) {
+			return String( h ).trim().toLowerCase().replace( /^https?:\/\//, '' ).replace( /\/.*$/, '' );
+		} )
+		.filter( Boolean );
 
 	class AnalyticsTracker {
 		constructor() {
@@ -47,7 +66,7 @@
 			return {
 				id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString( 36 ).substring( 2 ),
 				device: this.getDeviceContext(),
-				utm: this.getUtmParams(),
+				utm: {},
 				page_views: [],
 				events: [],
 				started_at: new Date().toISOString(),
@@ -90,13 +109,265 @@
 			};
 		}
 
+		/**
+		 * The campaign this page view arrived with, or an empty touch.
+		 *
+		 * All five UTM fields, not the three the Astro build read — utm_content
+		 * is the one that says WHICH email or post, and it is the field the
+		 * reports are actually built on. Google Ads click IDs count as a touch
+		 * too: an Ad Grant click auto-tagged with gclid often carries no UTMs at
+		 * all, and without this it would be filed as no campaign.
+		 */
 		getUtmParams() {
-			var urlParams = new URLSearchParams( window.location.search );
-			return {
-				source: urlParams.get( 'utm_source' ) || '',
-				medium: urlParams.get( 'utm_medium' ) || '',
-				campaign: urlParams.get( 'utm_campaign' ) || '',
-			};
+			var q = new URLSearchParams( window.location.search );
+			var touch = {};
+			UTM_KEYS.forEach( function ( k ) {
+				touch[ k ] = ( q.get( 'utm_' + k ) || '' ).trim();
+			} );
+
+			var click = '';
+			CLICK_IDS.forEach( function ( k ) {
+				if ( ! click && q.get( k ) ) click = k;
+			} );
+			if ( click ) {
+				touch.click_id = click;
+				if ( ! touch.source && GOOGLE_CLICK_IDS.indexOf( click ) !== -1 ) {
+					touch.source = 'google';
+					touch.medium = touch.medium || 'cpc';
+				}
+			}
+
+			return touch;
+		}
+
+		hasCampaign( touch ) {
+			return !! ( touch && ( touch.source || touch.medium || touch.campaign || touch.content ) );
+		}
+
+		sameCampaign( a, b ) {
+			if ( ! a || ! b ) return false;
+			return UTM_KEYS.every( function ( k ) {
+				return ( a[ k ] || '' ) === ( b[ k ] || '' );
+			} );
+		}
+
+		/**
+		 * Record the campaign in the URL, if there is one.
+		 *
+		 * The Astro build kept the FIRST source forever, which credits a donor's
+		 * December gift to whatever brought them in last spring. Now:
+		 *   utm         — the latest campaign (same key as before, so the email
+		 *                 template and any existing endpoint still read it)
+		 *   utm_first   — the first campaign ever, kept for the full story
+		 *   utm_touches — every distinct campaign touch, newest last, capped
+		 * A reload of the same URL is not a new touch.
+		 */
+		captureCampaign() {
+			// Sessions stored by 1.2.x carry only `utm`: that was the first touch.
+			var changed = false;
+			if ( this.hasCampaign( this.data.utm ) && ! this.data.utm_first ) {
+				this.data.utm_first = this.data.utm;
+				changed = true;
+			}
+			if ( ! this.data.utm_touches ) {
+				this.data.utm_touches = this.data.utm_first ? [ this.data.utm_first ] : [];
+				changed = true;
+			}
+
+			if ( ! this.data.referrer && document.referrer ) {
+				try {
+					var ref = new URL( document.referrer );
+					if ( ref.host && ref.host !== window.location.host && ! this.isDonationUrl( ref ) ) {
+						this.data.referrer = ref.host;
+						changed = true;
+					}
+				} catch ( e ) {}
+			}
+
+			/*
+			 * Back from the donation form. Give Lively redirects donors to the
+			 * site's own thank-you page, and this is the one moment the site
+			 * knows a gift happened — so it is logged with the campaign that had
+			 * the credit, and announced for anything else on the page (an
+			 * analytics tag, the thank-you copy) as `leadkit:donation-return`.
+			 */
+			try {
+				if ( document.referrer && this.isDonationUrl( new URL( document.referrer ) ) ) {
+					var credit = this.packedSource();
+					this.logEvent( 'donation_return', credit );
+					changed = false; // logEvent saved.
+					document.dispatchEvent(
+						new CustomEvent( 'leadkit:donation-return', {
+							detail: { source: credit, attribution: this.attribution() },
+						} )
+					);
+				}
+			} catch ( e ) {}
+
+			var touch = this.getUtmParams();
+			if ( ! this.hasCampaign( touch ) ) {
+				if ( changed ) this.saveData();
+				return;
+			}
+
+			touch.landing = window.location.pathname;
+			touch.time = new Date().toISOString();
+
+			var last = this.data.utm_touches[ this.data.utm_touches.length - 1 ];
+			if ( this.sameCampaign( last, touch ) && this.sameCampaign( this.data.utm, touch ) ) {
+				// Same link again: refresh the clock so the 30 days run from now.
+				this.data.utm.time = touch.time;
+				last.time = touch.time;
+				this.saveData();
+				return;
+			}
+
+			this.data.utm = touch;
+			if ( ! this.hasCampaign( this.data.utm_first ) ) {
+				this.data.utm_first = touch;
+			}
+			this.data.utm_touches.push( touch );
+			if ( this.data.utm_touches.length > MAX_TOUCHES ) {
+				this.data.utm_touches = this.data.utm_touches.slice( -MAX_TOUCHES );
+			}
+			this.saveData();
+		}
+
+		/**
+		 * The campaign that should get credit right now, or null.
+		 *
+		 * The latest touch, while it is younger than the attribution window.
+		 * A touch with no time (stored by 1.2.x) never expires — there is no way
+		 * to know its age, and dropping it would lose real attribution.
+		 */
+		attribution() {
+			var t = this.data.utm;
+			if ( ! this.hasCampaign( t ) ) return null;
+			if ( t.time ) {
+				var age = Date.now() - Date.parse( t.time );
+				if ( age > ATTRIBUTION_DAYS * 864e5 ) return null;
+			}
+			return t;
+		}
+
+		/**
+		 * Everything Give Lively needs, in the one field it keeps.
+		 *
+		 * Give Lively records utm_source and drops the rest, so the five fields
+		 * travel packed into it: medium__source__campaign__content[__term].
+		 * Fixed positions, double-underscore separator, trailing empties trimmed,
+		 * an empty middle field written as "none". Reporting splits it back on
+		 * "__". Values are folded to lowercase-and-dashes so no value can
+		 * contain the separator.
+		 *
+		 * With no campaign it still says something useful — organic search,
+		 * another site, or direct — rather than nothing.
+		 */
+		packedSource() {
+			var t = this.attribution();
+			var parts;
+
+			if ( t ) {
+				parts = [ t.medium, t.source, t.campaign, t.content, t.term ];
+			} else if ( this.data.referrer ) {
+				var host = this.data.referrer.replace( /^www\./, '' );
+				var organic = SEARCH_ENGINES.some( function ( s ) {
+					return host === s || host.indexOf( s + '.' ) === 0 || host.indexOf( '.' + s + '.' ) !== -1;
+				} );
+				parts = [ organic ? 'organic' : 'referral', host ];
+			} else {
+				parts = [ 'direct', 'website' ];
+			}
+
+			parts = parts.map( function ( p ) {
+				return String( p || '' )
+					.toLowerCase()
+					.replace( /[^a-z0-9.-]+/g, '-' )
+					.replace( /^-+|-+$/g, '' );
+			} );
+			while ( parts.length && ! parts[ parts.length - 1 ] ) parts.pop();
+
+			return parts
+				.map( function ( p ) {
+					return p || 'none';
+				} )
+				.join( PACK_SEP );
+		}
+
+		isDonationUrl( url ) {
+			return DONATION_HOSTS.some( function ( h ) {
+				return url.hostname === h || url.hostname.slice( -( h.length + 1 ) ) === '.' + h;
+			} );
+		}
+
+		/**
+		 * Put the visitor's campaign on a donation URL.
+		 *
+		 * The visitor's attribution wins over whatever the link carried — a
+		 * site's Donate button is the same link for everyone, and what matters
+		 * is how THIS donor got here. With no attribution, a link that already
+		 * has its own utm_source is left alone.
+		 *
+		 * @return {string|null} The new URL, or null when nothing changes.
+		 */
+		decorateUrl( raw ) {
+			var url;
+			try {
+				url = new URL( raw, window.location.href );
+			} catch ( e ) {
+				return null;
+			}
+			if ( ! this.isDonationUrl( url ) ) return null;
+
+			var t = this.attribution();
+			if ( ! t && url.searchParams.get( 'utm_source' ) ) return null;
+
+			var packed = this.packedSource();
+			if ( url.searchParams.get( 'utm_source' ) === packed ) return null;
+
+			url.searchParams.set( 'utm_source', packed );
+			if ( t ) {
+				// Harmless where they are ignored, and readable by analytics on
+				// the far side where they are not.
+				[ 'medium', 'campaign', 'content', 'term' ].forEach( function ( k ) {
+					if ( t[ k ] ) url.searchParams.set( 'utm_' + k, t[ k ] );
+				} );
+			}
+			return url.toString();
+		}
+
+		/**
+		 * Every donation link, button and embed on the page.
+		 *
+		 * Links are rewritten up front (so "copy link address" carries it) and
+		 * again at the moment of the click (in case the attribution changed, or
+		 * the link was added after load). Give Lively widgets read their target
+		 * from data-widget-src; iframes are only touched when the URL would
+		 * change, because a new src reloads the frame.
+		 */
+		decorateDonationLinks( root ) {
+			var self = this;
+			if ( ! root || ! root.querySelectorAll ) return;
+
+			root.querySelectorAll( 'a[href]' ).forEach( function ( a ) {
+				if ( a.hasAttribute( 'data-leadkit-keep' ) ) return;
+				var next = self.decorateUrl( a.getAttribute( 'href' ) );
+				if ( next ) a.setAttribute( 'href', next );
+			} );
+
+			root.querySelectorAll( '[data-widget-src]' ).forEach( function ( el ) {
+				if ( el.hasAttribute( 'data-leadkit-keep' ) ) return;
+				var next = self.decorateUrl( el.getAttribute( 'data-widget-src' ) );
+				if ( next ) el.setAttribute( 'data-widget-src', next );
+			} );
+
+			// A new src reloads the frame — only worth it for a real campaign.
+			if ( ! self.attribution() ) return;
+			root.querySelectorAll( 'iframe[src]' ).forEach( function ( f ) {
+				if ( f.hasAttribute( 'data-leadkit-keep' ) ) return;
+				var next = self.decorateUrl( f.getAttribute( 'src' ) );
+				if ( next ) f.setAttribute( 'src', next );
+			} );
 		}
 
 		/*
@@ -208,12 +479,34 @@
 		init() {
 			var self = this;
 
-			// Track UTMs on first visit.
-			var currentUtm = this.getUtmParams();
-			if ( currentUtm.source && ! this.data.utm.source ) {
-				this.data.utm = currentUtm;
-				this.saveData();
+			// Campaign touches: latest, first, and the run between.
+			this.captureCampaign();
+
+			// Donation links carry the campaign to Give Lively (or any host set
+			// under Settings → LeadKit → Donation hosts).
+			this.decorateDonationLinks( document );
+			if ( window.MutationObserver ) {
+				new MutationObserver( function ( records ) {
+					records.forEach( function ( r ) {
+						r.addedNodes.forEach( function ( n ) {
+							if ( n.nodeType !== 1 ) return;
+							if ( n.parentNode ) self.decorateDonationLinks( n.parentNode );
+						} );
+					} );
+				} ).observe( document.body, { childList: true, subtree: true } );
 			}
+			[ 'click', 'auxclick', 'contextmenu' ].forEach( function ( type ) {
+				document.addEventListener(
+					type,
+					function ( e ) {
+						var a = e.target && e.target.closest ? e.target.closest( 'a[href]' ) : null;
+						if ( ! a || a.hasAttribute( 'data-leadkit-keep' ) ) return;
+						var next = self.decorateUrl( a.getAttribute( 'href' ) );
+						if ( next ) a.setAttribute( 'href', next );
+					},
+					true
+				);
+			} );
 
 			// Active-time tracking.
 			document.addEventListener( 'visibilitychange', function () {
