@@ -2,6 +2,9 @@
 
 ## 1.3.1
 
+- With a People board, submissions are named by date and form
+  ("Oct 12, 2026 9:58 pm · Volunteer Inquiry"), so a person's "Form
+  submissions" list reads as a timeline; the name goes in a Name column.
 - **People and their submissions.** Set a **monday.com People board** and each
   person gets one row there, matched by email, the way Salesforce has a
   Contact with records related to it. Every `[leadkit_monday_form]` submission

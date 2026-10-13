@@ -533,8 +533,24 @@ function leadkit_handle_monday_form( $req ) {
 	}
 
 	// ---- then monday.com ----------------------------------------------------------
+	/*
+	 * With a People board the person's name lives on the person, and a
+	 * submission is named by when it happened and which form it was — which
+	 * is what reads in the person's "Form submissions" list. The name goes in
+	 * a Name column on the submission instead.
+	 */
+	$row_name = $item;
+	if ( leadkit_monday_people_board() ) {
+		$ncol = leadkit_monday_ensure_columns( $board, array( 'name' => array( 'Name', 'text' ) ), 'subname' );
+		if ( $ncol ) {
+			$values[ $ncol['name'] ] = mb_substr( $item, 0, 255 );
+			$short    = trim( preg_replace( '/\s*\([^)]*\)\s*$/', '', $def['title'] ) ) ?: $def['title'];
+			$row_name = mb_substr( wp_date( 'M j, Y g:i a' ) . ' · ' . $short, 0, 255 );
+		}
+	}
+
 	$group = $def['group'] ? ', group_id: $g' : '';
-	$vars  = array( 'b' => $board, 'n' => $item, 'v' => wp_json_encode( (object) $values ) );
+	$vars  = array( 'b' => $board, 'n' => $row_name, 'v' => wp_json_encode( (object) $values ) );
 	if ( $def['group'] ) {
 		$vars['g'] = $def['group'];
 	}
