@@ -67,12 +67,56 @@ lk_eq( leadkit_pack_campaign( array( 'medium' => 'email', 'source' => 'mailchimp
 $utm = array( 'medium' => 'email', 'source' => 'mailchimp', 'campaign' => 'light-the-path', 'content' => 'email-1', 'landing' => '/hope/', 'time' => gmdate( 'c', time() - 40 * DAY_IN_SECONDS ) );
 lk_eq( leadkit_credit_fields( array( 'utm' => $utm ) ), array( 'medium' => 'email', 'source' => 'mailchimp', 'campaign' => 'light-the-path', 'content' => 'email-1' ), 'credit: latest campaign, only its five fields' );
 update_option( 'leadkit_options', array( 'attribution_days' => '30' ) );
-lk_eq( leadkit_credit_fields( array( 'utm' => $utm, 'referrer' => 'www.google.com' ) ), array( 'medium' => 'organic', 'source' => 'google.com' ), 'credit: past the 30-day window, falls back to the referrer' );
+lk_eq( leadkit_credit_fields( array( 'utm' => $utm, 'referrer' => 'www.google.com' ) ), array( 'medium' => 'organic', 'source' => 'google' ), 'credit: past the 30-day window, falls back to the referrer (engine name)' );
 lk_eq( leadkit_credit_fields( array( 'utm_first' => $utm ), true ), array( 'medium' => 'email', 'source' => 'mailchimp', 'campaign' => 'light-the-path', 'content' => 'email-1' ), 'credit: the first campaign never expires' );
 update_option( 'leadkit_options', array() );
 lk_eq( leadkit_credit_fields( array( 'referrer' => 'news.example.org' ) ), array( 'medium' => 'referral', 'source' => 'news.example.org' ), 'credit: referral' );
-lk_eq( leadkit_credit_fields( array() ), array( 'medium' => 'direct', 'source' => 'website' ), 'credit: direct' );
-lk_eq( leadkit_pack_source( leadkit_credit_fields( array( 'referrer' => 'www.google.com' ) ) ), 'medium.organic__source.google-com', 'credit packs like the tracker\'s fallback (no visitorid on a board column)' );
+lk_eq( leadkit_credit_fields( array() ), array(), 'credit: typed in — nothing' );
+lk_eq( leadkit_pack_source( leadkit_credit_fields( array() ), 'x1234567' ), 'visitorid.x1234567', 'typed in packs to the id alone, as the tracker writes it' );
+lk_eq( leadkit_pack_source( leadkit_credit_fields( array( 'referrer' => 'www.google.com' ) ) ), 'medium.organic__source.google', 'credit packs like the tracker\'s fallback (no visitorid on a board column)' );
+
+// ---- the referring site ------------------------------------------------------------------
+$refs = array(
+	'referrer'  => 'google.com',
+	'referrers' => array(
+		array( 'domain' => 'facebook.com', 'time' => '2026-10-14T10:00:00Z' ),
+		array( 'domain' => 'google.com', 'time' => '2026-10-10T10:00:00Z' ),
+	),
+);
+lk_eq( leadkit_latest_referrer( $refs ), 'facebook.com', 'latest referrer: by time, not by order' );
+lk_eq( leadkit_credit_fields( $refs ), array( 'medium' => 'referral', 'source' => 'facebook.com' ), 'no campaign: the latest site gets the credit' );
+lk_eq( leadkit_pack_source( leadkit_credit_fields( $refs ) ), 'medium.referral__source.facebook-com', 'referral domain folded in the packed source' );
+lk_eq( leadkit_first_referrer( $refs ), 'google.com', 'first referrer: a pre-1.5 session falls back to referrer' );
+lk_eq( leadkit_first_referrer( $refs + array( 'first_referrer' => '' ) ), '', 'first referrer: a typed-in first visit stays empty, even with a later referrer' );
+lk_eq( leadkit_credit_fields( $refs + array( 'first_referrer' => '' ), true ), array(), 'First source: typed-in first visit, no campaign — nothing' );
+lk_eq( leadkit_latest_referrer( array( 'referrer' => 'www.news.example.org' ) ), 'news.example.org', 'latest referrer: falls back to referrer, www. dropped' );
+$utm_now = array( 'medium' => 'email', 'source' => 'mailchimp', 'campaign' => 'light-the-path', 'content' => 'email-1', 'time' => gmdate( 'c', time() - DAY_IN_SECONDS ) );
+lk_eq( leadkit_credit_fields( $refs + array( 'utm' => $utm_now ) )['medium'], 'email', 'a campaign keeps the credit over a later referrer' );
+foreach ( array(
+	'l.facebook.com'     => 'facebook.com',
+	'M.Facebook.com:443' => 'facebook.com',
+	'www2.example.org'   => 'example.org',
+	'mail.google.com'    => 'mail.google.com',
+) as $in => $want ) {
+	lk_eq( leadkit_clean_domain( $in ), $want, "clean domain $in" );
+}
+foreach ( array(
+	'google.com'        => 'google',
+	'google.co.uk'      => 'google',
+	'google.com.au'     => 'google',
+	'mail.google.com'   => '',
+	'news.google.com'   => '',
+	'bing.com'          => 'bing',
+	'cn.bing.com'       => 'bing',
+	'r.search.yahoo.com' => 'yahoo',
+	'mail.yahoo.com'    => '',
+	'duckduckgo.com'    => 'duckduckgo',
+	'facebook.com'      => '',
+) as $host => $want ) {
+	lk_eq( leadkit_search_engine( $host ), $want, "search engine $host" );
+}
+lk_eq( leadkit_source_label( array( 'referrer' => 'mail.google.com' ) ), 'Referral · mail.google.com', 'form summaries: Gmail is a referral too' );
+lk_eq( leadkit_source_label( array( 'referrer' => 'www.google.com' ) ), 'Organic search · google.com', 'form summaries: Google search still organic' );
 
 // ---- untracked pages -------------------------------------------------------------------
 update_option( 'leadkit_options', array( 'untracked_paths' => '/help/, /get-help/' ) );

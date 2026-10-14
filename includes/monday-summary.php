@@ -94,9 +94,8 @@ function leadkit_source_label( $t ) {
 	}
 	$ref = (string) ( $t['referrer'] ?? '' );
 	if ( $ref ) {
-		$host   = preg_replace( '/^www\./', '', $ref );
-		$search = (bool) preg_match( '/(^|\.)(google|bing|duckduckgo|yahoo|ecosia|baidu|yandex)\./', $host . '.' );
-		return ( $search ? 'Organic search · ' : 'Referral · ' ) . $host;
+		$host = leadkit_clean_domain( $ref );
+		return ( leadkit_search_engine( $host ) ? 'Organic search · ' : 'Referral · ' ) . $host;
 	}
 	return 'Direct';
 }

@@ -404,9 +404,12 @@ function leadkit_monday_version_header() {
  *
  * @param string $query     GraphQL.
  * @param array  $variables Variables.
+ * @param bool   $partial   Return what did succeed when part of a request failed —
+ *                          for several aliased mutations in one request, where
+ *                          one refused must not hide the others that were made.
  * @return array|null The data, or null on any error (logged).
  */
-function leadkit_monday( $query, $variables = array() ) {
+function leadkit_monday( $query, $variables = array(), $partial = false ) {
 	$token = leadkit_monday_token();
 	if ( ! $token ) {
 		return null;
@@ -427,6 +430,10 @@ function leadkit_monday( $query, $variables = array() ) {
 		return null;
 	}
 	$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+	if ( $partial && is_array( $json ) && ! empty( $json['errors'] ) && is_array( $json['data'] ?? null ) ) {
+		update_option( 'leadkit_last_monday_error', (string) ( $json['errors'][0]['message'] ?? 'partial failure' ), false );
+		return $json['data'];
+	}
 	if ( ! is_array( $json ) || ! empty( $json['errors'] ) || ! isset( $json['data'] ) ) {
 		$msg = is_array( $json ) && ! empty( $json['errors'][0]['message'] ) ? $json['errors'][0]['message'] : 'HTTP ' . wp_remote_retrieve_response_code( $res );
 		update_option( 'leadkit_last_monday_error', $msg, false );

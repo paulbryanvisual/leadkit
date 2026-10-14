@@ -139,11 +139,64 @@ function query( url ) {
 	eq( p.t.formParams().utm_source, 'mailchimp', 'forms still get plain utm_source' );
 
 	p = boot( { referrer: 'https://www.google.com/', storage: { leadkit_analytics_session: session() } } );
-	eq( p.t.packedSource(), 'medium.organic__source.google-com__visitorid.8f3k2q9a', 'organic search, host folded' );
+	eq( p.t.packedSource(), 'medium.organic__source.google__visitorid.8f3k2q9a', 'organic search: the engine\'s name, as Google Analytics writes it' );
 	p = boot( { referrer: 'https://news.example.org/story', storage: { leadkit_analytics_session: session() } } );
 	eq( p.t.packedSource(), 'medium.referral__source.news-example-org__visitorid.8f3k2q9a', 'referral' );
 	p = boot( { storage: { leadkit_analytics_session: session() } } );
-	eq( p.t.packedSource(), 'medium.direct__source.website__visitorid.8f3k2q9a', 'direct' );
+	eq( p.t.packedSource(), 'visitorid.8f3k2q9a', 'typed in: no medium or source, only the id' );
+
+	// ---- the referring site, on every landing -----------------------------------------
+	const ago = ( ms ) => new Date( Date.now() - ms ).toISOString();
+	p = boot( { referrer: 'https://www.google.com/search?q=3strands' } );
+	eq( p.t.data.first_referrer, 'google.com', 'new browser from Google: first_referrer google.com' );
+	eq( ( p.t.data.referrers || [] ).map( ( r ) => [ r.domain, r.landing ] ), [ [ 'google.com', '/hope/' ] ], 'and one referrer landing, domain only' );
+	eq( p.t.visitorBody().first_referrer, 'google.com', 'first_referrer sent to the Visitors endpoint' );
+	eq( p.t.visitorBody().referrers.length, 1, 'referrers sent too' );
+	p = boot();
+	eq( p.t.data.first_referrer, '', 'new browser, typed in: first_referrer is empty, not missing' );
+	p = boot( { storage: { leadkit_analytics_session: session( { page_views: [ { id: 'x', path: '/', time: ago( 864e5 ) } ] } ) }, referrer: 'https://www.google.com/' } );
+	ok( ! ( 'first_referrer' in p.t.data ), 'a browser from before 1.5: its first visit is unknown, so none is guessed' );
+	ok( ! ( 'first_referrer' in p.t.visitorBody() ), 'and none is sent' );
+
+	p = boot( { referrer: 'https://l.facebook.com/l.php?u=x', storage: { leadkit_analytics_session: session( { referrer: 'google.com', referrers: [ { domain: 'google.com', time: ago( 2 * 864e5 ), landing: '/' } ] } ) } } );
+	eq( p.t.data.referrers.map( ( r ) => r.domain ), [ 'google.com', 'facebook.com' ], 'a later landing is added; l.facebook.com is facebook.com' );
+	eq( p.t.data.referrer, 'google.com', 'referrer stays the first ever (what forms have always had)' );
+	eq( p.t.packedSource(), 'medium.referral__source.facebook-com__visitorid.8f3k2q9a', 'no campaign: the LATEST site gets the credit, as referral' );
+
+	p = boot( { referrer: 'https://www.google.com/', storage: { leadkit_analytics_session: session( { utm: { medium: 'email', source: 'mailchimp', campaign: 'light-the-path', content: 'email-1', time: ago( 5 * 864e5 ) } } ) } } );
+	eq( p.t.packedSource(), DOC, 'a campaign keeps the credit over a later search visit (approved rule)' );
+	eq( p.t.data.referrers.map( ( r ) => r.domain ), [ 'google.com' ], 'but the search visit is still recorded' );
+	p = boot( { cfg: { attributionDays: 3 }, referrer: 'https://www.google.com/', storage: { leadkit_analytics_session: session( { utm: { medium: 'email', source: 'mailchimp', campaign: 'light-the-path', content: 'email-1', time: ago( 5 * 864e5 ) } } ) } } );
+	eq( p.t.packedSource(), 'medium.organic__source.google__visitorid.8f3k2q9a', 'past the campaign-credit window, the search gets it' );
+
+	[
+		[ 'https://mail.google.com/mail/u/0/', 'medium.referral__source.mail-google-com', 'Gmail on the web is a referral, not a search' ],
+		[ 'https://www.google.co.uk/', 'medium.organic__source.google', 'google.co.uk is Google search' ],
+		[ 'https://r.search.yahoo.com/x', 'medium.organic__source.yahoo', 'Yahoo search' ],
+		[ 'https://duckduckgo.com/', 'medium.organic__source.duckduckgo', 'DuckDuckGo' ],
+		[ 'https://www.bing.com/search?q=x', 'medium.organic__source.bing', 'Bing' ],
+	].forEach( ( c ) => {
+		const q = boot( { referrer: c[ 0 ], storage: { leadkit_analytics_session: session() } } );
+		eq( q.t.packedSource(), c[ 1 ] + '__visitorid.8f3k2q9a', c[ 2 ] );
+	} );
+	[
+		[ 'https://www.3sgf.org/about/', 'this site, with www.' ],
+		[ 'https://new.3sgf.org/', 'a subdomain of this site' ],
+		[ 'https://secure.givelively.org/donate/x', 'the donation form coming back' ],
+		[ 'https://forms.monday.com/forms/abc', 'an outside form redirecting back' ],
+		[ 'android-app://com.google.android.gm/', 'an app' ],
+	].forEach( ( c ) => {
+		const q = boot( { referrer: c[ 0 ], storage: { leadkit_analytics_session: session() } } );
+		eq( ( q.t.data.referrers || [] ).length, 0, 'not a referrer: ' + c[ 1 ] );
+	} );
+	p = boot( { referrer: 'https://www.google.com/', storage: { leadkit_analytics_session: session( { referrers: [ { domain: 'google.com', time: ago( 10 * 6e4 ), landing: '/' } ] } ) } } );
+	eq( p.t.data.referrers.length, 1, 'back to Google results and in again within 30 minutes: the same visit' );
+	p = boot( { referrer: 'https://www.google.com/', storage: { leadkit_analytics_session: session( { referrers: [ { domain: 'google.com', time: ago( 31 * 6e4 ), landing: '/' } ] } ) } } );
+	eq( p.t.data.referrers.length, 2, 'after 30 minutes: a new landing' );
+	const lots = [];
+	for ( let i = 0; i < 30; i++ ) lots.push( { domain: 'site' + i + '.org', time: ago( ( 40 - i ) * 864e5 ), landing: '/' } );
+	p = boot( { referrer: 'https://news.example.org/', storage: { leadkit_analytics_session: session( { referrers: lots } ) } } );
+	eq( [ p.t.data.referrers.length, p.t.data.referrers[ 29 ].domain, p.t.data.referrers[ 0 ].domain ], [ 30, 'news.example.org', 'site1.org' ], 'kept to the last 30 landings' );
 
 	// A Give Lively-style link pointed at the site: its fields, not its visitorid.
 	p = boot( {
@@ -289,7 +342,7 @@ function query( url ) {
 		storage: { leadkit_analytics_session: session() },
 	} );
 	await tick();
-	eq( query( p.w.document.getElementById( 'give-lively-widget-inner' ).getAttribute( 'src' ) ).get( 'utm_source' ), 'medium.direct__source.website__visitorid.8f3k2q9a', 'Branded, drawn first: the frame is stamped (direct visitor still gets the id)' );
+	eq( query( p.w.document.getElementById( 'give-lively-widget-inner' ).getAttribute( 'src' ) ).get( 'utm_source' ), 'visitorid.8f3k2q9a', 'Branded, drawn first: the frame is stamped (a typed-in visitor still gets the id)' );
 	eq( ( p.t.data.donate_clicks || [] ).length, 0, 'Branded, drawn first: and that is not a click' );
 
 	// ---- Give Lively Simple widget (shadow root; URL built on click) -------------------

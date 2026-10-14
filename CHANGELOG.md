@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.5.0
+
+Where each visit came from, one row per visit.
+
+- **The referring site, on every landing.** The tracker records the domain of
+  the outside site that sent each landing (`referrers`, the last 30, domain
+  only: `l.facebook.com` and `m.facebook.com` are `facebook.com`), and the
+  very first visit's (`first_referrer`, empty when it was typed in). This
+  site and its subdomains, the donation form coming back, outside forms
+  redirecting back and apps are not referrers. A second landing from the same
+  site within 30 minutes is the same visit. `referrer` stays the first ever,
+  as forms have always had it.
+- **The source when there is no campaign, the way Google Analytics fills
+  it:** `medium.organic__source.google` (the engine's name) for a search
+  engine, `medium.referral__source.<domain>` for any other site, from the
+  latest site that sent them — and nothing for someone who only ever typed
+  the address in (the donation link then carries `visitorid.<id>` alone).
+  Search hosts only: Gmail on the web (`mail.google.com`) and Google News are
+  referrals. 1.4.0 wrote `source.google-com` and `medium.direct__source.website`.
+- **A campaign keeps the credit** over a later visit from a search engine or
+  another site (inside the campaign-credit window, if one is set). The plan
+  asks which email or post brought each donor; both referrers are recorded
+  either way.
+- **Visitors board: First referrer and Latest referrer** columns.
+- **monday.com Visits board** (Settings → LeadKit). One row per visit — a run
+  of pages with no gap over 30 minutes — connected to its row on the Visitors
+  board (Visitor): visitid, visitorid, Started (UTC, shown in each viewer's
+  zone), Referrer, Source (the campaign link the visit arrived on, else the
+  site that sent it, else blank), Landing page, Pages, Seconds on site,
+  Donate clicks, Forms and the Journey. Named "Oct 14, 2026 9:58am · Email ·
+  light-the-path · email-1". Written with the Visitors row, earlier visits
+  from the browser's story included: up to 40 a write, 20 to a request,
+  newest first, the rest on the next post. A visit this site has no row for
+  is looked up by visitid first, so lost local state cannot double a row; a
+  row deleted on monday.com is made again only when that visit changes. The
+  Visitors row stays the one gifts, forms and people connect to: one row per
+  visit could not take Donations' exact visitorid match.
+- The Visitors board's Journey log says where each visit came from for
+  referral visits too ("Referral · facebook.com"), and form summaries no
+  longer call Gmail an organic search.
+- `leadkit_monday()` can return what succeeded in a request where part
+  failed (`$partial`), for batches of aliased mutations.
+- On the 3SGF sandbox: DEMO – Visits (18435475074) was created with these
+  columns; its connection made "link to DEMO – Visits" on Visitors, renamed
+  "Visit rows" — not "Visits", which is already the count column there, and
+  columns are found by title.
+
 ## 1.4.0
 
 Every Give Lively gift can now be joined to the visits and forms before it.
