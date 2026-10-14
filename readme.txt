@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -95,6 +95,11 @@ campaign credited when the visitor came back from the donation host).
 * monday.com Visits board — with a Visitors board, one row per visit (pages
   with no gap over 30 minutes), connected to its visitor: Started, Referrer,
   Source, Landing page, Pages, Seconds on site, Donate clicks, Forms, Journey.
+* monday.com Donations board — with a People board, every 15 minutes LeadKit
+  links the newest gifts: finds or creates the donor by email, gives the
+  gift's browser the same person, and fills Open person links. Its Person
+  column must be two-way for People's Total given. On a cached host, run
+  wp-cron.php from a real cron every 15 minutes.
 * Untracked pages — path prefixes (e.g. /help/) where the tracker is not
   loaded and nothing is recorded or sent.
 * Form hosts — comma-separated domains of outside forms that take hidden
@@ -113,6 +118,14 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.6.0 =
+* Gift linker: finds or creates donors on People (after giving Zapier 10
+  minutes), connects each gift's browser to its person, and fills Open person
+  links — every 15 minutes.
+* Open person links on form submissions, Visitors and Visits rows, and gifts.
+* Return visits keep the Visitors and Visits boards current.
+* The page a form is sent from is part of the journey.
 
 = 1.5.0 =
 * The referring site is recorded on every landing; with no campaign the source

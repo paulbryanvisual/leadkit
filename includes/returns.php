@@ -317,6 +317,22 @@ function leadkit_handle_sync( $req ) {
 
 	update_option( $key, $state, false );
 
+	/*
+	 * A known browser with a row on the Visitors board: keep that row and its
+	 * visit rows current, not only at the next Donate click or form. At most
+	 * once a minute per browser, after the visitor is answered. Only from a
+	 * 1.5.1+ tracker, which sends the whole story — an older one sends only
+	 * the pages since the form, which would read as the browser's history.
+	 */
+	if ( leadkit_visitors_enabled() && array_key_exists( 'referrers', $body ) ) {
+		$known = get_option( leadkit_visitor_row_key( $visitor ), array() );
+		$brake = 'leadkit_vsync_' . md5( $visitor );
+		if ( ! empty( $known['row'] ) && ! get_transient( $brake ) ) {
+			set_transient( $brake, 1, MINUTE_IN_SECONDS );
+			leadkit_queue_visitor( $visitor, $body );
+		}
+	}
+
 	return new WP_REST_Response(
 		array(
 			'ok'     => true,

@@ -123,10 +123,12 @@ function query( url ) {
 	FIX.pack.forEach( ( c ) => {
 		const got = zap( { raw: c.packed } );
 		Object.keys( c.unpacked ).forEach( ( k ) => eq( got[ k ], c.unpacked[ k ], 'Zapier step ' + k + ': ' + c.name ) );
-		eq( Object.keys( got ), [ 'medium', 'source', 'campaign', 'content', 'term', 'visitorid' ], 'Zapier step returns all six outputs: ' + c.name );
+		eq( Object.keys( got ), [ 'medium', 'source', 'campaign', 'content', 'term', 'visitorid', 'email' ], 'Zapier step returns all seven outputs: ' + c.name );
 	} );
 	eq( zap( { raw: '' } ).visitorid, '', 'Zapier step: blank Utm Source gives blank outputs' );
 	eq( zap( { raw: 'medium.email__ref.abc__source.mailchimp' } ).source, 'mailchimp', 'Zapier step: unknown keys ignored' );
+	eq( zap( { raw: '', email: '  Grace.Liu@Example.ORG ' } ).email, 'grace.liu@example.org', 'Zapier step: donor email trimmed and lowercased, to match People' );
+	eq( zap( { raw: '' } ).email, '', 'Zapier step: no email in, blank email out' );
 
 	// ---- what a landing does -----------------------------------------------------
 	let p = boot( {
@@ -391,6 +393,37 @@ function query( url ) {
 	const ret = p.t.data.events.filter( ( e ) => e.type === 'donation_return' );
 	eq( ret.length, 1, 'donation return logged' );
 	eq( p.t.visitorBody().donation_returns.length, 1, 'and sent with the next Visitors post' );
+
+	// ---- a form packs the page it was sent from ---------------------------------------------
+	p = boot( {
+		url: 'https://3sgf.org/volunteer-inquiry/',
+		html: '<form data-leadkit data-leadkit-monday data-leadkit-form="volunteer" action="/wp-json/leadkit/v1/monday"><input name="q[name]" value="x"></form>',
+		storage: { leadkit_analytics_session: session( { page_views: [ { id: 'a', path: '/hope/', time: '2026-10-14T13:00:00Z' } ] } ) },
+	} );
+	const form = p.w.document.querySelector( 'form' );
+	form.dispatchEvent( new p.w.Event( 'submit', { bubbles: true, cancelable: true } ) );
+	const packedSession = JSON.parse( form.querySelector( 'input[name="analyticsData"]' ).value );
+	eq( packedSession.page_views.map( ( v ) => v.path ), [ '/hope/', '/volunteer-inquiry/' ], 'form: the page it was sent from is in the session' );
+
+	// ---- return visits send the whole story --------------------------------------------------
+	p = boot( {
+		url: 'https://3sgf.org/events/',
+		cfg: { syncUrl: 'https://3sgf.org/wp-json/leadkit/v1/sync' },
+		storage: {
+			leadkit_is_lead: 'true',
+			leadkit_analytics_session: session( {
+				lead_at: '2026-10-01T15:00:00.000Z',
+				lead_forms: [ { form: 'volunteer', time: '2026-10-01T15:00:00.000Z', path: '/volunteer-inquiry/' } ],
+				referrers: [ { domain: 'google.com', time: '2026-10-01T14:50:00.000Z', landing: '/' } ],
+				first_referrer: 'google.com',
+				page_views: [ { id: 'r1', path: '/hope/', time: '2026-10-05T15:00:00.000Z' } ],
+			} ),
+		},
+	} );
+	p.t.syncToServer();
+	const syncBody = ( p.calls.find( ( c ) => c.url.indexOf( '/sync' ) !== -1 ) || {} ).body || {};
+	eq( [ syncBody.lead_at, syncBody.first_referrer, ( syncBody.referrers || [] ).length, ( syncBody.lead_forms || [] ).length ], [ '2026-10-01T15:00:00.000Z', 'google.com', 1, 1 ], 'sync: lead fields plus the story the Visitors board needs' );
+	ok( ( syncBody.page_views || [] ).some( ( v ) => v.path === '/events/' ), 'sync: including the page being left', syncBody.page_views );
 
 	console.log( ( failed ? 'FAILED' : 'ok' ) + ' — ' + passed + ' passed, ' + failed + ' failed' );
 	process.exit( failed ? 1 : 0 );

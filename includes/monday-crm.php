@@ -146,6 +146,49 @@ function leadkit_form_person_column( $board, $people ) {
 }
 
 /**
+ * The "Open person" link column on a board: one click opens the person's own
+ * card, which monday.com's connect columns do not do (their pop-up only links
+ * to the board).
+ *
+ * @param string $board Board id.
+ * @return string Column id, or ''.
+ */
+function leadkit_open_person_column( $board ) {
+	$cols = leadkit_monday_ensure_columns( $board, array( 'open' => array( 'Open person', 'link' ) ), 'openperson' );
+	return (string) ( $cols['open'] ?? '' );
+}
+
+/**
+ * An item's name and address, once per request.
+ *
+ * @param string $id Item id.
+ * @return array|null { name, url }
+ */
+function leadkit_monday_item_brief( $id ) {
+	static $seen = array();
+	$id = (string) $id;
+	if ( '' === $id ) {
+		return null;
+	}
+	if ( ! array_key_exists( $id, $seen ) ) {
+		$data        = leadkit_monday( 'query ($i: [ID!]) { items(ids: $i) { id name url } }', array( 'i' => array( $id ) ) );
+		$it          = $data['items'][0] ?? null;
+		$seen[ $id ] = $it && ! empty( $it['url'] ) ? array( 'name' => (string) $it['name'], 'url' => (string) $it['url'] ) : null;
+	}
+	return $seen[ $id ];
+}
+
+/**
+ * A link column value pointing at a person.
+ *
+ * @param array $brief { name, url }.
+ * @return array
+ */
+function leadkit_person_link( $brief ) {
+	return array( 'url' => (string) $brief['url'], 'text' => (string) $brief['name'] );
+}
+
+/**
  * Find the person by email, or create them; connect the submission; roll up.
  *
  * @param array $args {
@@ -209,13 +252,15 @@ function leadkit_person_upsert( $args ) {
 			$values[ $cols['ids'] ] = array( 'text' => $args['visitor'] );
 		}
 		$made      = leadkit_monday(
-			'mutation ($b: ID!, $n: String!, $v: JSON) { create_item(board_id: $b, item_name: $n, column_values: $v) { id } }',
+			'mutation ($b: ID!, $n: String!, $v: JSON) { create_item(board_id: $b, item_name: $n, column_values: $v) { id url } }',
 			array( 'b' => $people, 'n' => $args['name'] ?: $email, 'v' => wp_json_encode( $values ) )
 		);
 		$person_id = (string) ( $made['create_item']['id'] ?? '' );
+		$brief     = $person_id ? array( 'name' => $args['name'] ?: $email, 'url' => (string) ( $made['create_item']['url'] ?? '' ) ) : null;
 		$is_new    = true;
 	} else {
 		$person_id = (string) $person['id'];
+		$brief     = null; // Its name may differ from what this form says; asked for below.
 		$is_new    = false;
 		$current   = array();
 		foreach ( (array) $person['column_values'] as $cv ) {
@@ -262,12 +307,18 @@ function leadkit_person_upsert( $args ) {
 		return '';
 	}
 
-	// The submission points at its person.
+	// The submission points at its person, and links to their card.
 	$pcol = leadkit_form_person_column( $args['board'], $people );
 	if ( $pcol ) {
+		$values = array( $pcol => array( 'item_ids' => array( (int) $person_id ) ) );
+		$brief  = $brief && $brief['url'] ? $brief : leadkit_monday_item_brief( $person_id );
+		$ocol   = $brief ? leadkit_open_person_column( $args['board'] ) : '';
+		if ( $ocol ) {
+			$values[ $ocol ] = leadkit_person_link( $brief );
+		}
 		leadkit_monday(
 			'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
-			array( 'i' => (string) $args['item_id'], 'b' => (string) $args['board'], 'v' => wp_json_encode( array( $pcol => array( 'item_ids' => array( (int) $person_id ) ) ) ) )
+			array( 'i' => (string) $args['item_id'], 'b' => (string) $args['board'], 'v' => wp_json_encode( $values ) )
 		);
 	}
 

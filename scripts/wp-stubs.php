@@ -27,8 +27,9 @@ $GLOBALS['lk_settings']   = array();
 function lk_reset() {
 	$GLOBALS['lk_options']    = array();
 	$GLOBALS['lk_transients'] = array();
-	$GLOBALS['lk_filters']    = array();
-	$GLOBALS['lk_actions']    = array();
+	// Back to the hooks the plugin registered when it loaded; drop the rest.
+	$GLOBALS['lk_filters']    = $GLOBALS['lk_boot_filters'] ?? array();
+	$GLOBALS['lk_actions']    = $GLOBALS['lk_boot_actions'] ?? array();
 	$GLOBALS['wpdb']->rows    = array();
 	LkMonday::reset();
 }
@@ -57,7 +58,12 @@ function remove_all_actions( $hook ) {
 	unset( $GLOBALS['lk_actions'][ $hook ] );
 }
 function add_shortcode() {}
+function register_post_type() {}
+function get_posts( $args = array() ) {
+	return array();
+}
 function register_activation_hook() {}
+function register_deactivation_hook() {}
 function register_rest_route() {}
 function register_setting( $group, $name, $args ) {
 	$GLOBALS['lk_settings'][ $name ] = $args;
@@ -272,6 +278,34 @@ class LkMonday {
 	public static function mutations() {
 		return array_values( array_filter( self::$calls, fn( $c ) => 0 === strpos( ltrim( $c['q'] ), 'mutation' ) ) );
 	}
+	public static function url( $b, $id ) {
+		return "https://example.monday.com/boards/$b/pulses/$id";
+	}
+	/** What monday.com shows as a column's text. */
+	public static function text( $val ) {
+		if ( ! is_array( $val ) ) {
+			return (string) $val;
+		}
+		if ( isset( $val['email'] ) ) {
+			return (string) $val['email'];
+		}
+		if ( isset( $val['url'] ) ) {
+			return ( $val['text'] ?? '' ) . ' - ' . $val['url'];
+		}
+		if ( isset( $val['text'] ) ) {
+			return (string) $val['text'];
+		}
+		return isset( $val['item_ids'] ) ? '' : json_encode( $val );
+	}
+	public static function find_item( $id ) {
+		foreach ( self::$boards as $b => $board ) {
+			if ( isset( $board['items'][ (string) $id ] ) ) {
+				return array( (string) $b, $board['items'][ (string) $id ] );
+			}
+		}
+		return null;
+	}
+
 	public static function answer( $q, $v ) {
 		self::$calls[] = array( 'q' => $q, 'v' => $v );
 		if ( self::$fault ) {
@@ -301,8 +335,8 @@ class LkMonday {
 				}
 				if ( 'create_item' === $m[2] ) {
 					$id                                = (string) ( self::$next++ );
-					self::$boards[ $b ]['items'][ $id ] = array( 'name' => $args['item_name'], 'values' => json_decode( $args['column_values'] ?? '{}', true ) ?: array() );
-					$data[ $m[1] ]                     = array( 'id' => $id );
+					self::$boards[ $b ]['items'][ $id ] = array( 'name' => $args['item_name'], 'created_at' => gmdate( 'c' ), 'values' => json_decode( $args['column_values'] ?? '{}', true ) ?: array() );
+					$data[ $m[1] ]                     = array( 'id' => $id, 'url' => self::url( $b, $id ) );
 				} elseif ( isset( self::$boards[ $b ]['items'][ (string) $args['item_id'] ] ) ) {
 					foreach ( json_decode( $args['column_values'], true ) as $col => $val ) {
 						self::$boards[ $b ]['items'][ (string) $args['item_id'] ]['values'][ $col ] = $val;
@@ -314,6 +348,33 @@ class LkMonday {
 				}
 			}
 			return array( 'data' => $data ) + ( $errors ? array( 'errors' => $errors ) : array() );
+		}
+
+		// Newest items on a board, with some columns (the gift linker).
+		if ( false !== strpos( $q, 'order_by' ) ) {
+			$b     = (string) $v['b'][0];
+			$items = self::$boards[ $b ]['items'] ?? array();
+			uasort( $items, fn( $x, $y ) => strcmp( $y['created_at'] ?? '', $x['created_at'] ?? '' ) );
+			$out = array();
+			foreach ( array_slice( $items, 0, 100, true ) as $id => $it ) {
+				$cvs = array();
+				foreach ( $v['c'] as $c ) {
+					$val   = $it['values'][ $c ] ?? null;
+					$cvs[] = array( 'id' => $c, 'text' => null === $val ? null : self::text( $val ), 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) );
+				}
+				$out[] = array( 'id' => (string) $id, 'name' => $it['name'], 'created_at' => $it['created_at'] ?? gmdate( 'c' ), 'column_values' => $cvs );
+			}
+			return array( 'data' => array( 'boards' => array( array( 'items_page' => array( 'items' => $out ) ) ) ) );
+		}
+		if ( false !== strpos( $q, 'items(ids: $i) { id name url }' ) ) {
+			$out = array();
+			foreach ( $v['i'] as $id ) {
+				$hit = self::find_item( $id );
+				if ( $hit ) {
+					$out[] = array( 'id' => (string) $id, 'name' => $hit[1]['name'], 'url' => self::url( $hit[0], $id ) );
+				}
+			}
+			return array( 'data' => array( 'items' => $out ) );
 		}
 
 		if ( false !== strpos( $q, 'columns { id title' ) ) {
@@ -336,8 +397,8 @@ class LkMonday {
 		if ( false !== strpos( $q, 'items_page_by_column_values' ) ) {
 			$hits = array();
 			foreach ( self::$boards[ (string) $v['b'] ]['items'] ?? array() as $id => $it ) {
-				if ( in_array( (string) ( $it['values'][ $v['c'] ] ?? '' ), $v['v'], true ) ) {
-					$hit = array( 'id' => (string) $id );
+				if ( in_array( self::text( $it['values'][ $v['c'] ] ?? '' ), $v['v'], true ) ) {
+					$hit = array( 'id' => (string) $id, 'name' => $it['name'], 'url' => self::url( $v['b'], $id ) );
 					if ( isset( $v['r'] ) ) {
 						$hit['column_values'] = array_map( fn( $c ) => array( 'text' => (string) ( $it['values'][ $c ] ?? '' ) ), $v['r'] );
 					}
@@ -351,8 +412,8 @@ class LkMonday {
 				return $err( 'board not found' );
 			}
 			$id = (string) ( self::$next++ );
-			self::$boards[ (string) $v['b'] ]['items'][ $id ] = array( 'name' => $v['n'], 'values' => json_decode( $v['v'] ?? '{}', true ) ?: array() );
-			return array( 'data' => array( 'create_item' => array( 'id' => $id ) ) );
+			self::$boards[ (string) $v['b'] ]['items'][ $id ] = array( 'name' => $v['n'], 'created_at' => gmdate( 'c' ), 'values' => json_decode( $v['v'] ?? '{}', true ) ?: array() );
+			return array( 'data' => array( 'create_item' => array( 'id' => $id, 'url' => self::url( $v['b'], $id ) ) ) );
 		}
 		if ( false !== strpos( $q, 'change_multiple_column_values' ) ) {
 			$b = (string) $v['b'];
@@ -365,13 +426,15 @@ class LkMonday {
 			return array( 'data' => array( 'change_multiple_column_values' => array( 'id' => $v['i'] ) ) );
 		}
 		if ( false !== strpos( $q, 'items(ids: $i)' ) ) {
-			foreach ( self::$boards as $board ) {
-				if ( isset( $board['items'][ (string) $v['i'][0] ] ) ) {
-					$val = $board['items'][ (string) $v['i'][0] ]['values'][ $v['c'][0] ] ?? array();
-					return array( 'data' => array( 'items' => array( array( 'column_values' => array( array( 'id' => $v['c'][0], 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) ) ) ) ) ) );
+			$out = array();
+			foreach ( $v['i'] as $id ) {
+				$hit = self::find_item( $id );
+				if ( $hit ) {
+					$val   = $hit[1]['values'][ $v['c'][0] ] ?? array();
+					$out[] = array( 'id' => (string) $id, 'column_values' => array( array( 'id' => $v['c'][0], 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) ) ) );
 				}
 			}
-			return array( 'data' => array( 'items' => array() ) );
+			return array( 'data' => array( 'items' => $out ) );
 		}
 		return $err( 'fake monday does not know: ' . substr( $q, 0, 80 ) );
 	}
@@ -410,3 +473,5 @@ function lk_done() {
 
 // The plugin, all of it, as WordPress would load it.
 require dirname( __DIR__ ) . '/leadkit.php';
+$GLOBALS['lk_boot_filters'] = $GLOBALS['lk_filters'];
+$GLOBALS['lk_boot_actions'] = $GLOBALS['lk_actions'];

@@ -1,5 +1,70 @@
 # Changelog
 
+## 1.6.0
+
+The connections monday.com cannot make by itself, made by LeadKit.
+
+- **Gift linker** (Settings → LeadKit → monday.com Donations board, with a
+  People board). Every 15 minutes LeadKit reads the newest 100 gifts and, for
+  up to 25 it has not finished:
+  1. no Person 10 minutes after the gift arrived: finds the donor on People
+     by Donor email (any case), or creates them, and sets the gift's Person.
+     The wait lets the Zap's own find-or-create and the email match go first;
+     LeadKit creating the donor while the Zap does would make two people;
+  2. fills the gift's **Open person** link;
+  3. a Visitor whose row has no Person: gives that browser the gift's
+     person, with Open person on its row and its visit rows, and LeadKit's own
+     record of the browser learns the person. A browser that already belongs
+     to someone (a shared computer) is left alone; the gift is on the right
+     person by email anyway.
+  A gift is finished when that is done, or after a week for one with no
+  email or no visitor (a QR-code gift). A failed lookup creates nobody; the
+  next run tries again. Scheduled on `leadkit_quarter_hour`, cleared when the
+  setting is emptied or the plugin is deactivated.
+- **Open person** links (a link column, created if missing): one click opens
+  the person's own card, which monday.com's connect columns cannot do (their
+  pop-up links only to the board). Written on form submissions, on the
+  Visitors row and every visit row when a person is connected, and on gifts.
+- **Return visits keep the Visitors board current.** The tracker's sync now
+  sends the whole recent story (as a Donate click does) plus the lead fields;
+  the server updates the browser's Visitors row and visit rows, at most once
+  a minute per browser, after answering. Only for browsers that already have
+  a row, and only from a 1.6 tracker (an older one sends just the pages since
+  the form, which would read as the whole history).
+- **The page a form is sent from** is in the journey now: the tracker records
+  the page before packing the session into the form.
+- Visit rows are written after the browser's person is connected, so they
+  can carry the person's link.
+- On the 3SGF sandbox: Donations' Person column was a one-way connection, so
+  People's Total given never counted a gift whose Person was set by the
+  automation or Zapier (only gifts linked from both sides by hand). It is now
+  two-way; People's new "Donations" column fills itself and Total given sums
+  it. The old one-way column is renamed "Donations (old – one-way)".
+
+How the work splits with the 3SGF Zap (Give Lively → Code → Create Item on
+Donations → Find Items on People → Filter "not found" → Create Item on People
+→ Update Item on Donations): the Zap creates a new donor and fills that
+gift's Person and Open person at once. For a returning donor the Filter stops
+the Zap, the email match fills Person, and LeadKit fills Open person. LeadKit
+alone gives the gift's browser its person, and is the backstop when a Zap
+step fails.
+
+Tried and rejected:
+
+- Zapier creating the person in one step: its monday.com search ("Find
+  Items", formerly "Get Item by Column Value") has no create-if-not-found, so
+  the Zap needs Find Items + a Filter + Create Item (Paths are not needed).
+- monday.com's match automation creating the person: the template's only
+  options are overwrite or add a match; it never creates.
+- monday.com automations giving the gift's browser the gift's person: that
+  changes a different item from the one that triggered the automation.
+- A monday.com formula building the person's address: formulas cannot be
+  written or filtered through the API, and a link column needs a value.
+
+Note: WordPress's scheduler only runs on requests that reach PHP. On a site
+SiteGround caches, set a real cron (Site Tools → Devs → Cron Jobs, wp-cron.php
+every 15 minutes) so the gift linker runs on time.
+
 ## 1.5.0
 
 Where each visit came from, one row per visit.

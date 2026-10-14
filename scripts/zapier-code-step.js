@@ -1,6 +1,7 @@
-// Zapier → Code by Zapier → Run JavaScript. Input Data: raw = Give Lively's "Utm Source".
-// Splits LeadKit's packed source back into its fields (either pair separator,
-// "__" or "-"); unknown keys are ignored. Paste the whole file into the step.
+// Zapier → Code by Zapier → Run JavaScript. Input Data: raw = Give Lively's "Utm Source",
+// email = Give Lively's "Email". Splits LeadKit's packed source back into its fields
+// (either pair separator, "__" or "-"; unknown keys ignored) and returns the donor's
+// email in lowercase, as LeadKit stores it on People. Paste the whole file into the step.
 const raw = String( inputData.raw || '' ).trim();
 const out = { medium: '', source: '', campaign: '', content: '', term: '', visitorid: '' };
 raw.split( '__' ).forEach( ( chunk ) => {
@@ -11,4 +12,5 @@ raw.split( '__' ).forEach( ( chunk ) => {
 		if ( key in out && ! out[ key ] ) out[ key ] = pair.slice( dot + 1 );
 	} );
 } );
+out.email = String( inputData.email || '' ).trim().toLowerCase();
 return out;

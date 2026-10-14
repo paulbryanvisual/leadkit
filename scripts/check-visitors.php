@@ -48,6 +48,7 @@ function lk_boards( $with_people = true ) {
 			'text_mm84778t'           => array( 'First referrer', 'text' ),
 			'text_mm84yh3a'           => array( 'Latest referrer', 'text' ),
 			'board_relation_mm84vyhe' => array( 'Visit rows', 'board_relation' ),
+			'link_mm84cbre'           => array( 'Open person', 'link' ),
 		)
 	);
 	LkMonday::board(
@@ -66,6 +67,7 @@ function lk_boards( $with_people = true ) {
 			'numeric_mm84t2yq'        => array( 'Donate clicks', 'numbers' ),
 			'text_mm847jmh'           => array( 'Forms', 'text' ),
 			'long_text_mm84vzah'      => array( 'Journey', 'long_text' ),
+			'link_mm84xwdw'           => array( 'Open person', 'link' ),
 		)
 	);
 	update_option(
@@ -420,5 +422,178 @@ update_option( 'leadkit_options', $o );
 lk_request( lk_post() );
 lk_eq( count( LkMonday::$boards[ VS ]['items'] ), 0, 'no Visits board: no visit rows' );
 lk_eq( count( lk_rows() ), 1, 'and the Visitors row is written as before' );
+
+// ---- 12. Open person links, and the gift linker ------------------------------------------------
+const GIFTS = '18435185080'; // DEMO – Donations
+function lk_gift_boards() {
+	lk_boards();
+	LkMonday::board( PEOPLE, array( 'name' => array( 'Name', 'name' ), 'email_mm83fpfp' => array( 'Email', 'email' ) ) );
+	LkMonday::board(
+		GIFTS,
+		array(
+			'name'                    => array( 'Name', 'name' ),
+			'board_relation_mm83z7sa' => array( 'Person', 'board_relation' ),
+			'email_mm846aas'          => array( 'Donor email', 'email' ),
+			'link_mm84y7n4'           => array( 'Open person', 'link' ),
+			'board_relation_mm84k7qr' => array( 'Visitor', 'board_relation' ),
+			'text_mm84wm8e'           => array( 'visitorid', 'text' ),
+		)
+	);
+	$o                           = get_option( 'leadkit_options' );
+	$o['monday_donations_board'] = GIFTS;
+	update_option( 'leadkit_options', $o );
+}
+function lk_person( $name, $email ) {
+	$r = LkMonday::answer( 'mutation ($b: ID!, $n: String!, $v: JSON) { create_item(board_id: $b, item_name: $n, column_values: $v) { id url } }', array( 'b' => PEOPLE, 'n' => $name, 'v' => json_encode( array( 'email_mm83fpfp' => array( 'email' => $email, 'text' => $email ) ) ) ) );
+	return $r['data']['create_item']['id'];
+}
+function lk_gift( $name, $vals, $age = 20 * MINUTE_IN_SECONDS ) {
+	$id = (string) ( LkMonday::$next++ );
+	LkMonday::$boards[ GIFTS ]['items'][ $id ] = array( 'name' => $name, 'created_at' => gmdate( 'c', time() - $age ), 'values' => $vals );
+	return $id;
+}
+function lk_item( $board, $id ) {
+	return LkMonday::$boards[ $board ]['items'][ $id ]['values'] ?? array();
+}
+function lk_people_named( $name ) {
+	return array_keys( array_filter( LkMonday::$boards[ PEOPLE ]['items'], fn( $it ) => $it['name'] === $name ) );
+}
+
+// A form submission: the browser's row and its visits link to the person's card.
+lk_gift_boards();
+$maria = lk_person( 'Maria Delgado', 'maria@example.org' );
+$analytics = lk_post();
+$analytics['id'] = $V;
+remove_all_actions( 'shutdown' );
+leadkit_queue_visitor( $V, $analytics, array( 'person' => $maria, 'form' => 'Volunteer Inquiry' ) );
+do_action( 'shutdown' );
+$vrow = array_key_first( lk_rows() );
+lk_eq( lk_item( VB, $vrow )['link_mm84cbre'] ?? null, array( 'url' => LkMonday::url( PEOPLE, $maria ), 'text' => 'Maria Delgado' ), 'form: the browser row opens the person' );
+lk_eq( array_values( array_unique( array_map( fn( $r ) => $r['values']['link_mm84xwdw']['text'] ?? '-', lk_visits() ) ) ), array( 'Maria Delgado' ), 'form: every visit row opens the person' );
+
+// The gift linker.
+lk_gift_boards();
+$grace = lk_person( 'Grace Liu', 'grace@example.org' );
+$other = lk_person( 'Someone Else', 'else@example.org' );
+// A browser LeadKit knows, with no person yet (a donor who never sent a form).
+lk_request( lk_post() );
+$vrow = array_key_first( lk_rows() );
+// And a second browser that already belongs to someone (a shared computer).
+lk_request( array_merge( lk_post(), array( 'visitor_id' => 'b0b0b0b0-shared' ) ), '203.0.113.40' );
+$shared = array_key_last( lk_rows() );
+LkMonday::$boards[ VB ]['items'][ $shared ]['values']['board_relation_mm84ysfv'] = array( 'item_ids' => array( (int) $other ) );
+
+$g_exist   = lk_gift( 'Grace Liu', array( 'email_mm846aas' => array( 'email' => 'Grace@Example.org', 'text' => 'Grace@Example.org' ) ) );
+$g_new     = lk_gift( 'New Donor', array( 'email_mm846aas' => array( 'email' => 'new@example.org', 'text' => 'new@example.org' ), 'text_mm84wm8e' => $V, 'board_relation_mm84k7qr' => array( 'item_ids' => array( (int) $vrow ) ) ) );
+$g_linked  = lk_gift( 'Grace Liu', array( 'email_mm846aas' => array( 'email' => 'grace@example.org', 'text' => 'grace@example.org' ), 'board_relation_mm83z7sa' => array( 'item_ids' => array( (int) $grace ) ) ) );
+$g_shared  = lk_gift( 'Grace Liu', array( 'email_mm846aas' => array( 'email' => 'grace@example.org', 'text' => 'grace@example.org' ), 'text_mm84wm8e' => 'b0b0b0b0-shared', 'board_relation_mm84k7qr' => array( 'item_ids' => array( (int) $shared ) ) ) );
+$g_pending = lk_gift( 'Grace Liu', array( 'email_mm846aas' => array( 'email' => 'grace@example.org', 'text' => 'grace@example.org' ), 'text_mm84wm8e' => 'c1c1c1c1-pending' ) );
+$g_noemail = lk_gift( 'Anonymous', array() );
+
+$run = leadkit_link_gifts();
+lk_eq( array( $run['looked'], $run['people'] ), array( 6, 1 ), 'linker: six gifts looked at, one new person made' );
+lk_eq( lk_item( GIFTS, $g_exist )['board_relation_mm83z7sa'] ?? null, array( 'item_ids' => array( (int) $grace ) ), 'linker: an existing donor is found by email (any case), not duplicated' );
+lk_eq( count( lk_people_named( 'Grace Liu' ) ), 1, 'linker: still one Grace' );
+$made = lk_people_named( 'New Donor' );
+lk_eq( count( $made ), 1, 'linker: a new donor is created on People' );
+lk_eq( LkMonday::$boards[ PEOPLE ]['items'][ $made[0] ]['values']['email_mm83fpfp']['email'] ?? null, 'new@example.org', 'linker: with their email' );
+lk_eq( lk_item( GIFTS, $g_new )['board_relation_mm83z7sa'] ?? null, array( 'item_ids' => array( (int) $made[0] ) ), 'linker: and the gift points at them' );
+lk_eq( lk_item( GIFTS, $g_new )['link_mm84y7n4']['text'] ?? null, 'New Donor', 'linker: the gift opens the person' );
+lk_eq( lk_item( GIFTS, $g_linked )['link_mm84y7n4']['url'] ?? null, LkMonday::url( PEOPLE, $grace ), 'linker: a gift the automation already connected gets its link' );
+lk_eq( lk_item( VB, $vrow )['board_relation_mm84ysfv'] ?? null, array( 'item_ids' => array( (int) $made[0] ) ), 'linker: the gift\'s browser gets the gift\'s person' );
+lk_eq( lk_item( VB, $vrow )['link_mm84cbre']['text'] ?? null, 'New Donor', 'linker: and opens them' );
+lk_eq( array_values( array_unique( array_map( fn( $r ) => $r['values']['link_mm84xwdw']['text'] ?? '-', array_filter( lk_visits(), fn( $r ) => $r['values']['text_mm84dxxx'] === $V ) ) ) ), array( 'New Donor' ), 'linker: so do that browser\'s visit rows' );
+lk_eq( get_option( leadkit_visitor_row_key( $V ) )['linked'] ?? null, (string) $made[0], 'linker: LeadKit\'s own record of the browser knows the person' );
+lk_eq( lk_item( VB, $shared )['board_relation_mm84ysfv'] ?? null, array( 'item_ids' => array( (int) $other ) ), 'linker: a browser that belongs to someone else is left alone' );
+lk_eq( lk_item( GIFTS, $g_shared )['board_relation_mm83z7sa'] ?? null, array( 'item_ids' => array( (int) $grace ) ), 'linker: and that gift is still on the right person, by email' );
+$done = get_option( 'leadkit_gifts_done' );
+lk_eq( array( isset( $done[ $g_exist ] ), isset( $done[ $g_new ] ), isset( $done[ $g_linked ] ), isset( $done[ $g_shared ] ), isset( $done[ $g_pending ] ), isset( $done[ $g_noemail ] ) ), array( true, true, true, true, false, false ), 'linker: finished gifts are remembered; one waiting for its visitor, and one with no email, are not' );
+
+// Run again: nothing to do, nothing written.
+LkMonday::$calls = array();
+leadkit_link_gifts();
+lk_eq( count( LkMonday::mutations() ), 0, 'linker: a second run writes nothing' );
+
+// The visitor match arrives later: the next run links that browser.
+lk_request( array_merge( lk_post(), array( 'visitor_id' => 'c1c1c1c1-pending' ) ), '203.0.113.41' );
+$late = array_key_last( lk_rows() );
+LkMonday::$boards[ GIFTS ]['items'][ $g_pending ]['values']['board_relation_mm84k7qr'] = array( 'item_ids' => array( (int) $late ) );
+leadkit_link_gifts();
+lk_eq( lk_item( VB, $late )['board_relation_mm84ysfv'] ?? null, array( 'item_ids' => array( (int) $grace ) ), 'linker: a visitor match that comes later is picked up' );
+
+// A QR gift (no visitorid) is finished once its person is linked; a gift with no
+// email and no hope of one is let go after a week.
+$g_qr  = lk_gift( 'Tom Becker', array( 'email_mm846aas' => array( 'email' => 'tom@example.org', 'text' => 'tom@example.org' ) ) );
+$g_old = lk_gift( 'Old anonymous', array(), 8 * DAY_IN_SECONDS );
+leadkit_link_gifts();
+$done = get_option( 'leadkit_gifts_done' );
+lk_eq( array( isset( $done[ $g_qr ] ), isset( $done[ $g_old ] ) ), array( true, true ), 'linker: QR gift finished; week-old gift with nothing to go on let go' );
+
+// A gift that just arrived with no Person is Zapier's for 10 minutes: creating
+// the donor while the Zap does would make two people. One already connected is
+// not waited on.
+lk_gift_boards();
+$g_young = lk_gift( 'Fresh Donor', array( 'email_mm846aas' => array( 'email' => 'fresh@example.org', 'text' => 'fresh@example.org' ) ), 60 );
+$g_auto  = lk_gift( 'Grace Liu', array( 'board_relation_mm83z7sa' => array( 'item_ids' => array( (int) $grace ) ) ), 60 );
+leadkit_link_gifts();
+$done = get_option( 'leadkit_gifts_done' );
+lk_eq( array( count( lk_people_named( 'Fresh Donor' ) ), isset( $done[ $g_young ] ) ), array( 0, false ), 'linker: a gift under 10 minutes old with no Person is left to Zapier, and not let go' );
+lk_eq( lk_item( GIFTS, $g_auto )['link_mm84y7n4']['url'] ?? null, LkMonday::url( PEOPLE, $grace ), 'linker: a young gift already connected gets its link at once' );
+LkMonday::$boards[ GIFTS ]['items'][ $g_young ]['created_at'] = gmdate( 'c', time() - 11 * MINUTE_IN_SECONDS );
+leadkit_link_gifts();
+lk_eq( count( lk_people_named( 'Fresh Donor' ) ), 1, 'linker: after 10 minutes with no Person, LeadKit makes the donor' );
+
+// monday.com unreachable mid-run: no person is invented.
+lk_gift_boards();
+$g = lk_gift( 'Careful Donor', array( 'email_mm846aas' => array( 'email' => 'careful@example.org', 'text' => 'careful@example.org' ) ) );
+LkMonday::$fault = fn( $q, $v ) => false !== strpos( $q, 'items_page_by_column_values' ) ? array( 'errors' => array( array( 'message' => 'Internal' ) ) ) : null;
+leadkit_link_gifts();
+LkMonday::$fault = null;
+lk_eq( count( lk_people_named( 'Careful Donor' ) ), 0, 'linker: lookup failed — nobody created' );
+leadkit_link_gifts();
+lk_eq( count( lk_people_named( 'Careful Donor' ) ), 1, 'linker: next run, created once' );
+
+// Off without a Donations board, and the schedule follows the setting.
+$GLOBALS['lk_cron'] = array();
+function wp_next_scheduled( $h ) {
+	return $GLOBALS['lk_cron'][ $h ] ?? false;
+}
+function wp_schedule_event( $t, $r, $h ) {
+	$GLOBALS['lk_cron'][ $h ] = $r;
+}
+function wp_clear_scheduled_hook( $h ) {
+	unset( $GLOBALS['lk_cron'][ $h ] );
+}
+do_action( 'init' );
+lk_eq( $GLOBALS['lk_cron']['leadkit_link_gifts'] ?? null, 'leadkit_quarter_hour', 'linker: scheduled every 15 minutes when set up' );
+$o = get_option( 'leadkit_options' );
+$o['monday_donations_board'] = '';
+update_option( 'leadkit_options', $o );
+do_action( 'init' );
+lk_eq( $GLOBALS['lk_cron'], array(), 'linker: unscheduled when the board is cleared' );
+lk_eq( leadkit_link_gifts()['looked'], 0, 'linker: does nothing without a Donations board' );
+lk_eq( apply_filters( 'cron_schedules', array() )['leadkit_quarter_hour']['interval'] ?? null, 900, 'linker: the 15-minute schedule exists' );
+
+// Return visits keep the Visitors board current — from a 1.5.1+ tracker only.
+lk_boards();
+lk_request( lk_post() );
+$vrow = array_key_first( lk_rows() );
+$sync = lk_post();
+$sync['lead_at']      = gmdate( 'c', strtotime( '2026-10-14 13:00:00 UTC' ) );
+$sync['page_views'][] = array( 'id' => 'later', 'path' => '/events/', 'active_time_ms' => 20000, 'max_scroll_percent' => 40, 'time' => gmdate( 'c', strtotime( '2026-10-14 15:30:00 UTC' ) ) );
+remove_all_actions( 'shutdown' );
+leadkit_handle_sync( new WP_REST_Request( json_encode( $sync ) ) );
+do_action( 'shutdown' );
+lk_eq( lk_item( VB, $vrow )['numeric_mm84mt3y'] ?? null, '3', 'return visit: the Visitors row counts the new visit' );
+lk_ok( false !== strpos( lk_item( VB, $vrow )['long_text_mm84qwht']['text'] ?? '', '/events/' ), 'return visit: and logs it' );
+lk_eq( count( lk_visits() ), 3, 'return visit: with its own visit row' );
+$old = $sync;
+unset( $old['referrers'] );
+$old['page_views'][] = array( 'id' => 'later2', 'path' => '/blog/', 'active_time_ms' => 20000, 'max_scroll_percent' => 40, 'time' => gmdate( 'c', strtotime( '2026-10-14 17:00:00 UTC' ) ) );
+delete_transient( 'leadkit_vsync_' . md5( $V ) );
+remove_all_actions( 'shutdown' );
+leadkit_handle_sync( new WP_REST_Request( json_encode( $old ) ) );
+do_action( 'shutdown' );
+lk_eq( count( lk_visits() ), 3, 'return visit from an older tracker: Visitors board left alone' );
 
 lk_done();
