@@ -16,8 +16,13 @@ design rather than importing its own.
 
 **The tracker.** First-party, no third-party script, attaching behavioural
 context to each lead — including every campaign (UTM) touch. The latest
-campaign is stamped onto donation links, packed into `utm_source` as
-`medium__source__campaign__content`, because Give Lively keeps only that field.
+campaign is stamped onto donation links with the visitor id, packed into
+`utm_source` as labeled pairs —
+`medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>` —
+because Give Lively keeps only that field. With a monday.com Visitors board
+set, each Donate click and form submission keeps that visitor's row current,
+so a gift can be joined to the visits before it. Pages listed as untracked
+(a Get Help page) get no tracker at all.
 
 ## The server side is not in here
 
@@ -51,6 +56,19 @@ On first activation the plugin adopts the theme-era options it replaced
 (`roger_form_endpoint`, `roger_turnstile_sitekey`, and the
 `ROGER_TURNSTILE_SITEKEY` constant) so moving the form out of a theme does not
 mean re-typing its settings. Harmless anywhere those never existed.
+
+## Checks
+
+```bash
+php scripts/check-packing.php
+php scripts/check-visitors.php
+NODE_PATH=/path/to/node_modules node scripts/check-tracker.js   # needs jsdom
+```
+
+Each exits non-zero on a failure. The packing fixtures in
+`scripts/fixtures/packed-source.json` are shared by the PHP and JS checks
+and by the Zapier step (`scripts/zapier-code-step.js`), so all three write
+and read the same bytes.
 
 ## Requirements
 

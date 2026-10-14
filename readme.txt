@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.4.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -26,7 +26,9 @@ Two pieces, one plugin:
   localStorage: page views, active time per page, max scroll depth, photo
   clicks, rage clicks, campaign (UTM) touches. Nothing is sent for anonymous
   visitors. The latest campaign is stamped onto donation links (Give Lively by
-  default), packed into utm_source as medium__source__campaign__content.
+  default) with the visitor id, packed into utm_source as labeled pairs:
+  medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+  Give Lively's embedded widgets (Branded and Simple) get it too.
   The session attaches to the lead at the moment one identifies themself: it is
   injected into the form as a hidden `analyticsData` field on submit, and the
   first `tel:` or `mailto:` click posts it with the interaction. After that,
@@ -55,6 +57,22 @@ page_views, device, utm }. Older builds sent:
     page_views: [ { path, active_time_ms, max_scroll_percent, time } ],
     events: [ { type, value, time, path } ], started_at } }
 
+`leadkit/v1/visitor` — JSON POST on each Donate click, when a Visitors board
+is set (the tracker gets no URL otherwise). Queued in the browser and resent
+on the next page load until a 2xx (or a 4xx other than 429):
+  { visitor_id, started_at, referrer, utm, utm_first, utm_touches (last 30),
+    page_views (last 100: id, path, active_time_ms, max_scroll_percent, time),
+    donate_clicks: [ { id, time, path, how: "link"|"widget" } ],
+    lead_forms, donation_returns: [ { time, path } ], timezone }
+Answers 200 once the row is written (or already said the same), 400/413 for
+a body it will never take, 429 when braked, 502 when monday.com failed.
+
+The packed source on donation links: key.value pairs in this order, "__"
+between pairs (or "-" with the leadkit/packed_pair_separator filter), empty
+pairs left out, values folded to [a-z0-9] and single dashes:
+  medium · source · campaign · content · term · visitorid
+scripts/zapier-code-step.js is the Code by Zapier step that splits it back.
+
 A campaign touch (`utm`, `utm_first`, each of `utm_touches`) is
   { source, medium, campaign, content, term, click_id?, landing, time }
 `utm` is the latest touch; sessions from 1.2.x carry only source / medium /
@@ -69,6 +87,12 @@ campaign credited when the visitor came back from the donation host).
   which is useful for local layout parity.
 * Donation hosts — comma-separated domains whose links get the visitor's
   campaign (default givelively.org; subdomains match). Empty turns it off.
+* monday.com Visitors board — one row per browser, keyed by visitorid, written
+  on each Donate click and form submission: First and Last seen, Visits, First
+  and Latest source, Donate clicks, Journey log, and connected to its form
+  submissions and its person. Missing columns are created.
+* Untracked pages — path prefixes (e.g. /help/) where the tracker is not
+  loaded and nothing is recorded or sent.
 * Form hosts — comma-separated domains of outside forms that take hidden
   fields (default forms.monday.com, wkf.ms). They get utm_source … utm_term
   plus the campaign history parameter and first_touch, landing_page,
@@ -85,6 +109,15 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.4.0 =
+* Donation links carry labeled pairs with the visitor id:
+  medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+  Give Lively's Branded and Simple widgets get the same.
+* monday.com Visitors board: one row per browser, updated on every Donate click
+  and form submission, connected to the submission and the person.
+* Donate clicks that fail to send are queued in the browser and resent.
+* Untracked pages: no tracker, nothing recorded or sent (e.g. /help/).
 
 = 1.3.0 =
 * Captures all five UTM fields plus Google Ads click IDs.

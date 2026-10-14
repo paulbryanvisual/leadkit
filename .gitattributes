@@ -1,0 +1,3 @@
+# Kept out of the release zip WordPress installs: the checks are for development.
+/scripts export-ignore
+/.gitattributes export-ignore

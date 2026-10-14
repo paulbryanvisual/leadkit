@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.3.1
+ * Version:           1.4.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan Visual
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.3.1' );
+define( 'LEADKIT_VERSION', '1.4.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -44,6 +44,7 @@ require_once LEADKIT_DIR . '/includes/monday-summary.php';
 require_once LEADKIT_DIR . '/includes/monday-stops.php';
 require_once LEADKIT_DIR . '/includes/monday-people.php';
 require_once LEADKIT_DIR . '/includes/monday-crm.php';
+require_once LEADKIT_DIR . '/includes/visitors.php';
 require_once LEADKIT_DIR . '/includes/monday-form.php';
 
 /**
@@ -62,6 +63,8 @@ function leadkit_options() {
 		'monday_token'      => '',
 		'monday_boards'     => '',
 		'monday_people_board' => '',
+		'monday_visitors_board' => '',
+		'untracked_paths'   => '',
 		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
 		'turnstile_secret'  => '',
@@ -134,7 +137,43 @@ register_activation_hook(
 );
 
 /**
- * The visitor tracker, on every front-end page.
+ * Pages that are never tracked (Settings → LeadKit → Untracked pages).
+ *
+ * @return string[] Path prefixes, each with a trailing slash.
+ */
+function leadkit_untracked_paths() {
+	$out = array();
+	foreach ( preg_split( '/[\s,]+/', (string) ( leadkit_options()['untracked_paths'] ?? '' ) ) as $p ) {
+		$p = strtolower( trim( $p ) );
+		if ( '' !== $p ) {
+			$out[] = '/' . trim( $p, '/' ) . '/';
+		}
+	}
+	return array_values( array_unique( str_replace( '//', '/', $out ) ) );
+}
+
+/**
+ * Whether a path is one nobody may be tracked on.
+ *
+ * Prefix match on whole segments: "/help/" covers /help/ and /help/hotline/
+ * but not /helpful/.
+ *
+ * @param string $path URL path.
+ * @return bool
+ */
+function leadkit_is_untracked_path( $path ) {
+	$path = '/' . trim( strtolower( (string) $path ), '/' ) . '/';
+	$path = str_replace( '//', '/', $path );
+	foreach ( leadkit_untracked_paths() as $prefix ) {
+		if ( 0 === strpos( $path, $prefix ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * The visitor tracker, on every front-end page but the untracked ones.
  *
  * Deferred: it only binds listeners, so it has no business on the critical
  * path. The config the script needs travels as JSON printed before it.
@@ -143,6 +182,18 @@ add_action(
 	'wp_enqueue_scripts',
 	function () {
 		if ( is_admin() ) {
+			return;
+		}
+
+		/*
+		 * Not on a page someone at risk might use (a "Get Help" page): no
+		 * script at all, so nothing is recorded there and nothing is posted
+		 * from it. The filter lets a theme add its own rule.
+		 *
+		 * @param bool $track Whether to load the tracker on this request.
+		 */
+		$path = (string) wp_parse_url( (string) ( $_SERVER['REQUEST_URI'] ?? '/' ), PHP_URL_PATH ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		if ( ! apply_filters( 'leadkit/track_page', ! leadkit_is_untracked_path( $path ) ) ) {
 			return;
 		}
 
@@ -172,6 +223,11 @@ add_action(
 					'submitAction'  => $opts['submit_url'],
 					'syncUrl'       => $opts['sync_url'],
 					'trackUrl'      => $opts['track_url'],
+					// Only where there is a Visitors board to write to.
+					'visitorUrl'    => leadkit_visitors_enabled() ? rest_url( LEADKIT_REST_NS . '/visitor' ) : '',
+					'packPairSep'   => leadkit_pack_pair_sep(),
+					// So pages recorded there before the setting are dropped too.
+					'untrackedPaths' => leadkit_untracked_paths(),
 					'storagePrefix'   => $opts['storage_prefix'],
 					'donationHosts'   => array_values( array_filter( array_map( 'trim', explode( ',', (string) $opts['donation_hosts'] ) ) ) ),
 					'attributionDays' => max( 0, (int) $opts['attribution_days'] ),
