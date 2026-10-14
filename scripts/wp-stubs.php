@@ -7,6 +7,11 @@
  * For the check-*.php scripts only. Never loaded by the plugin.
  */
 
+// Development checks: never over the web, even if this folder is ever deployed.
+if ( 'cli' !== PHP_SAPI ) {
+	exit;
+}
+
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'MINUTE_IN_SECONDS', 60 );
 define( 'HOUR_IN_SECONDS', 3600 );

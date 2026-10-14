@@ -12,6 +12,11 @@
  * Exits non-zero on any failure.
  */
 
+// Development checks: never over the web, even if this folder is ever deployed.
+if ( 'cli' !== PHP_SAPI ) {
+	exit;
+}
+
 require __DIR__ . '/wp-stubs.php';
 
 $fix = json_decode( file_get_contents( __DIR__ . '/fixtures/packed-source.json' ), true );

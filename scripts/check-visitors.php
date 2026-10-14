@@ -15,6 +15,11 @@
  * Exits non-zero on any failure.
  */
 
+// Development checks: never over the web, even if this folder is ever deployed.
+if ( 'cli' !== PHP_SAPI ) {
+	exit;
+}
+
 require __DIR__ . '/wp-stubs.php';
 
 const VB     = '18435450271'; // DEMO – Visitors
