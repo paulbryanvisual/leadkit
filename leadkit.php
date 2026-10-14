@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.5.0
+ * Version:           1.6.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan Visual
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.5.0' );
+define( 'LEADKIT_VERSION', '1.6.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -45,6 +45,7 @@ require_once LEADKIT_DIR . '/includes/monday-stops.php';
 require_once LEADKIT_DIR . '/includes/monday-people.php';
 require_once LEADKIT_DIR . '/includes/monday-crm.php';
 require_once LEADKIT_DIR . '/includes/visitors.php';
+require_once LEADKIT_DIR . '/includes/gifts.php';
 require_once LEADKIT_DIR . '/includes/monday-form.php';
 
 /**
@@ -65,6 +66,7 @@ function leadkit_options() {
 		'monday_people_board' => '',
 		'monday_visitors_board' => '',
 		'monday_visits_board' => '',
+		'monday_donations_board' => '',
 		'untracked_paths'   => '',
 		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
@@ -105,6 +107,14 @@ function leadkit_options() {
 
 	return $opts;
 }
+
+/** The gift linker's 15-minute schedule goes with the plugin. */
+register_deactivation_hook(
+	__FILE__,
+	function () {
+		wp_clear_scheduled_hook( 'leadkit_link_gifts' );
+	}
+);
 
 /**
  * First activation on a site that already carried the theme-era options picks

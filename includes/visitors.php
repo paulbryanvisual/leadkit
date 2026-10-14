@@ -94,6 +94,7 @@ function leadkit_visitor_columns( $board ) {
 		'log'    => array( 'Journey log', 'long_text' ),
 		'fref'   => array( 'First referrer', 'text' ),
 		'lref'   => array( 'Latest referrer', 'text' ),
+		'open'   => array( 'Open person', 'link' ),
 	);
 	$people = leadkit_monday_people_board();
 	if ( $people ) {
@@ -303,6 +304,7 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		'items'   => array(), // Submissions still to connect.
 		'person'  => '',      // Person still to connect.
 		'linked'  => '',      // Person already connected.
+		'brief'   => array(), // That person's name and address, for Open person links.
 	);
 	$st = leadkit_visitor_merge( $st, $data );
 	if ( ! empty( $link['item'] ) ) {
@@ -382,9 +384,6 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 	$st['row']  = $row;
 	$st['hash'] = $hash;
 
-	// A row per visit on the Visits board, connected to this one.
-	leadkit_visits_write( $visitor, $row, $details, $st );
-
 	/*
 	 * The connections, each in its own request: a submission on a board the
 	 * column does not connect to is refused by monday.com, and that must not
@@ -401,13 +400,23 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 	}
 	if ( $st['person'] && ! empty( $cols['person'] ) && $st['person'] !== $st['linked'] ) {
 		// One person per browser on the board; the latest to give an email.
-		if ( leadkit_visitor_set( $board, $row, array( $cols['person'] => array( 'item_ids' => array( (int) $st['person'] ) ) ) ) ) {
+		$brief  = leadkit_monday_item_brief( $st['person'] );
+		$values = array( $cols['person'] => array( 'item_ids' => array( (int) $st['person'] ) ) );
+		if ( $brief ) {
+			$values[ $cols['open'] ] = leadkit_person_link( $brief );
+		}
+		if ( leadkit_visitor_set( $board, $row, $values ) ) {
 			$st['linked'] = $st['person'];
+			$st['brief']  = $brief ?: array();
 		}
 	}
 	if ( $st['person'] === $st['linked'] ) {
 		$st['person'] = '';
 	}
+
+	// A row per visit on the Visits board, connected to this one — after the
+	// person, so each visit can link to them too.
+	leadkit_visits_write( $visitor, $row, $details, $st );
 	if ( count( $st['items'] ) > 20 ) {
 		$st['items'] = array_slice( $st['items'], -20 ); // A board that never takes them.
 	}
@@ -823,6 +832,7 @@ function leadkit_visit_columns( $board ) {
 			'clicks'   => array( 'Donate clicks', 'numbers' ),
 			'forms'    => array( 'Forms', 'text' ),
 			'journey'  => array( 'Journey', 'long_text' ),
+			'open'     => array( 'Open person', 'link' ),
 		),
 		'visits'
 	);
@@ -858,10 +868,11 @@ function leadkit_visit_name( $d ) {
  * @param string $key     Visit key.
  * @param array  $d       From leadkit_visit_details().
  * @param array  $cols    Column ids.
+ * @param array  $brief   The browser's person { name, url }, if known.
  * @return array
  */
-function leadkit_visit_values( $visitor, $row, $key, $d, $cols ) {
-	return array(
+function leadkit_visit_values( $visitor, $row, $key, $d, $cols, $brief = array() ) {
+	$values = array(
 		$cols['key']      => $key,
 		$cols['visitor']  => $visitor,
 		$cols['link']     => array( 'item_ids' => array( (int) $row ) ),
@@ -876,6 +887,10 @@ function leadkit_visit_values( $visitor, $row, $key, $d, $cols ) {
 		$cols['forms']    => mb_substr( implode( ', ', $d['forms'] ), 0, 2000 ),
 		$cols['journey']  => array( 'text' => mb_substr( implode( ' > ', $d['items'] ), 0, LEADKIT_VISITOR_LOG_MAX ) ),
 	);
+	if ( ! empty( $brief['url'] ) ) {
+		$values[ $cols['open'] ] = leadkit_person_link( $brief );
+	}
+	return $values;
 }
 
 /**
@@ -912,7 +927,7 @@ function leadkit_visits_write( $visitor, $row, $details, &$st ) {
 	$todo = array();
 	foreach ( array_reverse( $details ) as $d ) {
 		$key    = leadkit_visit_key( $visitor, $d['first'] );
-		$values = leadkit_visit_values( $visitor, $row, $key, $d, $cols );
+		$values = leadkit_visit_values( $visitor, $row, $key, $d, $cols, (array) ( $st['brief'] ?? array() ) );
 		$hash   = md5( (string) wp_json_encode( $values ) );
 		if ( ( $st['visits'][ $key ]['hash'] ?? '' ) === $hash ) {
 			continue;

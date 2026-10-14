@@ -205,19 +205,21 @@
 			} );
 			if ( ! views.length ) return;
 
+			/*
+			 * The whole recent story, as a Donate click sends it — so the
+			 * server can keep the Visitors board current with return visits
+			 * too — plus the lead's own fields. The server only takes pages
+			 * after lead_at as return visits, and merges by id.
+			 */
+			var body = this.visitorBody();
+			body.lead_at = this.data.lead_at;
+			body.lead_forms = this.data.lead_forms || [];
+			body.device = this.data.device;
 			try {
 				fetch( SYNC_URL, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify( {
-						visitor_id: this.data.id,
-						lead_at: this.data.lead_at,
-						lead_forms: this.data.lead_forms || [],
-						page_views: views,
-						device: this.data.device,
-						utm: this.data.utm,
-						timezone: this.timeZone(),
-					} ),
+					body: JSON.stringify( body ),
 					keepalive: true,
 					credentials: 'omit',
 				} );
@@ -1434,7 +1436,10 @@
 					action.indexOf( 'formspree' ) !== -1;
 				if ( ! isLeadForm ) return;
 
-				self.updateActiveTime();
+				// This page, recorded before the session is packed into the
+				// form — or the page the form was sent from is missing from
+				// the journey.
+				self.recordPageView();
 
 				var hiddenInput = form.querySelector( 'input[name="analyticsData"]' );
 				if ( ! hiddenInput ) {
