@@ -123,10 +123,12 @@ function query( url ) {
 	FIX.pack.forEach( ( c ) => {
 		const got = zap( { raw: c.packed } );
 		Object.keys( c.unpacked ).forEach( ( k ) => eq( got[ k ], c.unpacked[ k ], 'Zapier step ' + k + ': ' + c.name ) );
-		eq( Object.keys( got ), [ 'medium', 'source', 'campaign', 'content', 'term', 'visitorid' ], 'Zapier step returns all six outputs: ' + c.name );
+		eq( Object.keys( got ), [ 'medium', 'source', 'campaign', 'content', 'term', 'visitorid', 'email' ], 'Zapier step returns all seven outputs: ' + c.name );
 	} );
 	eq( zap( { raw: '' } ).visitorid, '', 'Zapier step: blank Utm Source gives blank outputs' );
 	eq( zap( { raw: 'medium.email__ref.abc__source.mailchimp' } ).source, 'mailchimp', 'Zapier step: unknown keys ignored' );
+	eq( zap( { raw: '', email: '  Grace.Liu@Example.ORG ' } ).email, 'grace.liu@example.org', 'Zapier step: donor email trimmed and lowercased, to match People' );
+	eq( zap( { raw: '' } ).email, '', 'Zapier step: no email in, blank email out' );
 
 	// ---- what a landing does -----------------------------------------------------
 	let p = boot( {
