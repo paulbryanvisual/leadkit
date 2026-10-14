@@ -102,12 +102,21 @@ function leadkit_source_label( $t ) {
 }
 
 /**
- * A packed campaign ("email__mailchimp__light-the-path__email-1") as words.
+ * A packed campaign as words — by position ("email__mailchimp__light-the-path__email-1")
+ * or labeled ("medium.email__source.mailchimp__…", as donation links carry it).
  *
  * @param string $packed Packed touch.
  * @return string
  */
 function leadkit_packed_label( $packed ) {
+	$labeled = leadkit_unpack_source( $packed );
+	if ( $labeled ) {
+		$t = array();
+		foreach ( array( 'medium', 'source', 'campaign', 'content' ) as $k ) {
+			$t[ 'utm_' . $k ] = $labeled[ $k ] ?? '';
+		}
+		return leadkit_source_label( $t );
+	}
 	$p = explode( '__', (string) $packed );
 	return leadkit_source_label(
 		array(

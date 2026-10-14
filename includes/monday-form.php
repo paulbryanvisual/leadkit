@@ -597,6 +597,7 @@ function leadkit_handle_monday_form( $req ) {
 				break;
 			}
 		}
+		$person_id = '';
 		if ( $email && leadkit_monday_people_board() ) {
 			// One row per person on the People board; the submission is connected to it.
 			$phone_val = null;
@@ -606,7 +607,7 @@ function leadkit_handle_monday_form( $req ) {
 					break;
 				}
 			}
-			leadkit_person_upsert(
+			$person_id = leadkit_person_upsert(
 				array(
 					'board'   => $board,
 					'item_id' => $item_id,
@@ -620,6 +621,12 @@ function leadkit_handle_monday_form( $req ) {
 			);
 		} elseif ( $email && $email_col ) {
 			leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visitor, $item );
+		}
+
+		// This browser's row on the Visitors board: the submission and the
+		// person connected to it. After the visitor is answered.
+		if ( $visitor && is_array( $decoded ) ) {
+			leadkit_queue_visitor( $visitor, $decoded, array( 'item' => $item_id, 'person' => $person_id, 'form' => $def['title'] ) );
 		}
 	}
 	if ( ! is_wp_error( $post_id ) && $email ) {

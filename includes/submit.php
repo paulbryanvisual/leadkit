@@ -152,6 +152,8 @@ function leadkit_handle_submit( $req ) {
 		if ( $vid ) {
 			// So a return visit by the same browser finds this lead.
 			update_post_meta( $post_id, '_leadkit_visitor_id', $vid );
+			// And the Visitors board hears about it, after the visitor is answered.
+			leadkit_queue_visitor( $vid, $decoded, array( 'form' => $fields['type'] ?: __( 'Lead form', 'leadkit' ) ) );
 		}
 		leadkit_link_wp_leads( $post_id, $fields['email'] );
 	}
@@ -577,4 +579,114 @@ function leadkit_pack_campaign( $touch ) {
 		return '';
 	}
 	return implode( '__', array_map( fn( $p ) => '' === $p ? 'none' : $p, $parts ) );
+}
+
+const LEADKIT_PACK_KEYS = array( 'medium', 'source', 'campaign', 'content', 'term', 'visitorid' );
+
+/**
+ * The separator between labeled pairs: "__", or "-" if a site switches.
+ *
+ * "-" is the fallback for the day Give Lively turns out to strip
+ * underscores: values never hold a period, so "-" before a known key still
+ * splits cleanly. Both are read either way.
+ *
+ * @return string
+ */
+function leadkit_pack_pair_sep() {
+	/**
+	 * The pair separator in packed sources. "__" (default) or "-".
+	 *
+	 * @param string $sep Separator.
+	 */
+	return '-' === apply_filters( 'leadkit/packed_pair_separator', '__' ) ? '-' : '__';
+}
+
+/**
+ * A value folded to lowercase letters, numbers and single dashes.
+ *
+ * @param mixed $v Raw value.
+ * @return string
+ */
+function leadkit_pack_value( $v ) {
+	return trim( preg_replace( '/[^a-z0-9]+/', '-', strtolower( (string) $v ) ), '-' );
+}
+
+/**
+ * Labeled packing — the same as tracker.js writes onto donation links:
+ *
+ *   medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+ *
+ * Fixed key names in a fixed order, empty pairs left out.
+ *
+ * @param array  $fields  medium, source, campaign, content, term.
+ * @param string $visitor Visitor id, or '' to leave it out.
+ * @return string
+ */
+function leadkit_pack_source( $fields, $visitor = '' ) {
+	$pairs = array();
+	foreach ( LEADKIT_PACK_KEYS as $k ) {
+		$v = leadkit_pack_value( 'visitorid' === $k ? $visitor : ( $fields[ $k ] ?? '' ) );
+		if ( '' !== $v ) {
+			$pairs[] = $k . '.' . $v;
+		}
+	}
+	return implode( leadkit_pack_pair_sep(), $pairs );
+}
+
+/**
+ * A labeled packed source back into its fields; null when it is not one.
+ * Reads either pair separator; unknown keys are ignored.
+ *
+ * @param string $raw Packed value.
+ * @return array|null
+ */
+function leadkit_unpack_source( $raw ) {
+	$raw = (string) $raw;
+	if ( ! preg_match( '/^(?:' . implode( '|', LEADKIT_PACK_KEYS ) . ')\./', $raw ) ) {
+		return null;
+	}
+	$out = array();
+	foreach ( explode( '__', $raw ) as $chunk ) {
+		foreach ( preg_split( '/-(?=(?:' . implode( '|', LEADKIT_PACK_KEYS ) . ')\.)/', $chunk ) as $pair ) {
+			$dot = strpos( $pair, '.' );
+			if ( ! $dot ) {
+				continue;
+			}
+			$k = substr( $pair, 0, $dot );
+			if ( in_array( $k, LEADKIT_PACK_KEYS, true ) && ! isset( $out[ $k ] ) ) {
+				$out[ $k ] = substr( $pair, $dot + 1 );
+			}
+		}
+	}
+	return $out;
+}
+
+/**
+ * Who gets the credit, as tracker.js works it out: the latest campaign (inside
+ * the campaign-credit window, if one is set), else organic search, another
+ * site, or direct.
+ *
+ * @param array $analytics Decoded analyticsData (or a Visitors post).
+ * @param bool  $first     The first campaign instead of the latest.
+ * @return array medium, source, campaign, content, term.
+ */
+function leadkit_credit_fields( $analytics, $first = false ) {
+	$t = $analytics[ $first ? 'utm_first' : 'utm' ] ?? array();
+	$t = is_array( $t ) ? $t : array();
+	$has = ! empty( $t['source'] ) || ! empty( $t['medium'] ) || ! empty( $t['campaign'] ) || ! empty( $t['content'] );
+
+	$days = (int) ( leadkit_options()['attribution_days'] ?? 0 );
+	if ( $has && ! $first && $days > 0 && ! empty( $t['time'] ) && strtotime( (string) $t['time'] ) < time() - $days * DAY_IN_SECONDS ) {
+		$has = false;
+	}
+	if ( $has ) {
+		return array_intersect_key( $t, array_flip( array( 'medium', 'source', 'campaign', 'content', 'term' ) ) );
+	}
+
+	$ref = preg_replace( '/^www\./', '', strtolower( (string) ( $analytics['referrer'] ?? '' ) ) );
+	if ( $ref ) {
+		$organic = (bool) preg_match( '/(^|\.)(google|bing|duckduckgo|yahoo|ecosia|baidu|yandex)(\.|$)/', $ref );
+		return array( 'medium' => $organic ? 'organic' : 'referral', 'source' => $ref );
+	}
+	return array( 'medium' => 'direct', 'source' => 'website' );
 }

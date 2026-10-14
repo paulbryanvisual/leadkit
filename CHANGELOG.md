@@ -1,5 +1,84 @@
 # Changelog
 
+## 1.4.0
+
+Every Give Lively gift can now be joined to the visits and forms before it.
+Built for the 3Strands "Light the Path" plan: a gift arrives on a monday.com
+Donations board through Zapier, and its packed source carries the same visitor
+id the forms send.
+
+- **Labeled packed source on donation links.** `utm_source` is now key.value
+  pairs with the visitor id, in a fixed order, empty pairs left out:
+  `medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>`.
+  Values fold to lowercase letters, numbers and single dashes (`google.com`
+  becomes `google-com`), so neither separator can appear inside one. Every
+  stamp carries the visitor id, including direct visitors
+  (`medium.direct__source.website__visitorid.…`). With no campaign of their
+  own, a link's own campaign is kept and gets the id — a hand-built packed
+  link, plain UTMs, or a 1.3 positional `utm_source`. A site page reached
+  with a packed `utm_source` reads it as its fields and ignores its visitorid.
+  `campaign_history`, `first_touch` and `_leadkit_utm_packed` stay positional,
+  as form reports split them. Key names are fixed: monday.com formulas and the
+  Zapier step look for them.
+- **If Give Lively strips underscores** (the first $1 test answers this):
+  `add_filter( 'leadkit/packed_pair_separator', fn() => '-' );` switches the
+  pair separator to `-`. Both separators are read everywhere.
+- **Give Lively's widgets get the source too.** The Branded widget reads
+  `data-widget-src` once and adds the page's own `utm_source` to its frame;
+  LeadKit stamps the attribute and, if the frame still ends up with two
+  `utm_source` values, leaves only its own (one frame reload, only on a
+  landing page with UTMs in its address). The Simple widget builds its URL at
+  the click, inside a shadow root, and sets it on a pop-up frame; LeadKit
+  watches each open shadow root a click passes through and stamps that frame.
+- **monday.com Visitors board** (Settings → LeadKit). One row per visitor id:
+  visitorid, First and Last seen, Visits (30 minutes away starts a new one),
+  First and Latest source (packed, no visitorid), Donate clicks, and the
+  Journey log — each visit newest first, with the campaign it came from, its
+  pages, and the form sent, the Donate click or the return from Give Lively
+  where it happened, kept under monday.com's 2,000-character limit. Columns
+  are found by title and created if missing. Written on every Donate click
+  (new route `leadkit/v1/visitor`) and every form submission (after the
+  visitor is answered), and connected to the submission (Form submissions,
+  merged with links made by hand) and to the person (Person, with a People
+  board; the latest email wins on a shared computer). Each connection is its
+  own request, so one monday.com refuses cannot take the row down with it.
+  The Donations column is left to the automation on the Donations board.
+- **Retry what fails.** A Donate click is written to a browser outbox before
+  it is posted (`fetch` with `keepalive`, the beacon if that throws), and only
+  removed when the server answers. Unconfirmed posts are resent on the next
+  page load, built fresh from the visitor's story; 5xx and 429 are retried up
+  to eight times over 30 days, a 400 is dropped. The server merges by id, so a
+  resend changes nothing — and writes nothing to monday.com when the row
+  already says the same.
+- **Untracked pages** (Settings → LeadKit). Path prefixes, e.g. `/help/`,
+  where the tracker is not loaded at all — nothing recorded, nothing posted.
+  Anything a browser recorded there before is purged from its storage and
+  dropped by the server. `leadkit/track_page` filters it per request. On
+  3sgf.org the tracker was loading on Get Help (/help/) until this is set.
+- The endpoint is public, as it must be: it only writes the row of the id it
+  is given, refuses bodies over 64 KB, and brakes per IP (30 posts per ten
+  minutes, five new rows an hour). The monday.com token never leaves
+  WordPress.
+- `scripts/check-tracker.js`, `check-packing.php` and `check-visitors.php`:
+  the tracker in a jsdom page, the PHP packing against the same fixtures, and
+  the Visitors writes against a fake monday.com. `scripts/zapier-code-step.js`
+  is the Code by Zapier step, tested against those fixtures.
+
+Tried and rejected:
+
+- Handing the Simple widget its source by putting `utm_source` into the
+  address bar (`history.replaceState`) around the click. Both widgets read
+  `location.search`, so it would work for both — but GA4's enhanced
+  measurement counts history changes as page views, and the address bar would
+  carry a visitor id anyone copying the link would pass on.
+- `add_option()` as the per-visitor lock. It upserts (`ON DUPLICATE KEY
+  UPDATE`), so two requests can both "win" and both create a row. The lock is
+  an `INSERT IGNORE` on the options table instead.
+- Counting every donation frame `src` change as a Donate click. Lazy-loading
+  (SiteGround's included) swaps a frame's `src` in on scroll; only the
+  Simple widget's own pop-up frame, or one inside a shadow root a click
+  passed through, counts.
+
 ## 1.3.1
 
 - Times follow the visitor's own time zone (sent by the tracker as
