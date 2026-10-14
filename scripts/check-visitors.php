@@ -447,7 +447,7 @@ function lk_person( $name, $email ) {
 	$r = LkMonday::answer( 'mutation ($b: ID!, $n: String!, $v: JSON) { create_item(board_id: $b, item_name: $n, column_values: $v) { id url } }', array( 'b' => PEOPLE, 'n' => $name, 'v' => json_encode( array( 'email_mm83fpfp' => array( 'email' => $email, 'text' => $email ) ) ) ) );
 	return $r['data']['create_item']['id'];
 }
-function lk_gift( $name, $vals, $age = 0 ) {
+function lk_gift( $name, $vals, $age = 20 * MINUTE_IN_SECONDS ) {
 	$id = (string) ( LkMonday::$next++ );
 	LkMonday::$boards[ GIFTS ]['items'][ $id ] = array( 'name' => $name, 'created_at' => gmdate( 'c', time() - $age ), 'values' => $vals );
 	return $id;
@@ -528,6 +528,20 @@ $g_old = lk_gift( 'Old anonymous', array(), 8 * DAY_IN_SECONDS );
 leadkit_link_gifts();
 $done = get_option( 'leadkit_gifts_done' );
 lk_eq( array( isset( $done[ $g_qr ] ), isset( $done[ $g_old ] ) ), array( true, true ), 'linker: QR gift finished; week-old gift with nothing to go on let go' );
+
+// A gift that just arrived with no Person is Zapier's for 10 minutes: creating
+// the donor while the Zap does would make two people. One already connected is
+// not waited on.
+lk_gift_boards();
+$g_young = lk_gift( 'Fresh Donor', array( 'email_mm846aas' => array( 'email' => 'fresh@example.org', 'text' => 'fresh@example.org' ) ), 60 );
+$g_auto  = lk_gift( 'Grace Liu', array( 'board_relation_mm83z7sa' => array( 'item_ids' => array( (int) $grace ) ) ), 60 );
+leadkit_link_gifts();
+$done = get_option( 'leadkit_gifts_done' );
+lk_eq( array( count( lk_people_named( 'Fresh Donor' ) ), isset( $done[ $g_young ] ) ), array( 0, false ), 'linker: a gift under 10 minutes old with no Person is left to Zapier, and not let go' );
+lk_eq( lk_item( GIFTS, $g_auto )['link_mm84y7n4']['url'] ?? null, LkMonday::url( PEOPLE, $grace ), 'linker: a young gift already connected gets its link at once' );
+LkMonday::$boards[ GIFTS ]['items'][ $g_young ]['created_at'] = gmdate( 'c', time() - 11 * MINUTE_IN_SECONDS );
+leadkit_link_gifts();
+lk_eq( count( lk_people_named( 'Fresh Donor' ) ), 1, 'linker: after 10 minutes with no Person, LeadKit makes the donor' );
 
 // monday.com unreachable mid-run: no person is invented.
 lk_gift_boards();

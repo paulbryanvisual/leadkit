@@ -16,9 +16,10 @@
  * So every 15 minutes LeadKit looks at the newest gifts (Settings → LeadKit →
  * monday.com Donations board) and, for each one it has not finished:
  *
- *   1. no Person: finds the donor on People by email, or creates them, and
- *      sets the gift's Person (a two-way column, so the person's Donations and
- *      Total given follow);
+ *   1. no Person 10 minutes after the gift arrived (Zapier's own find-or-create
+ *      and the email match go first): finds the donor on People by email, or
+ *      creates them, and sets the gift's Person (a two-way column, so the
+ *      person's Donations and Total given follow);
  *   2. fills the gift's "Open person" link;
  *   3. a Visitor whose row has no Person yet: gives it this gift's person, and
  *      fills "Open person" on that browser's row and its visit rows. A browser
@@ -37,6 +38,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const LEADKIT_GIFT_HOOK      = 'leadkit_link_gifts';
 const LEADKIT_GIFT_WAIT      = 7 * DAY_IN_SECONDS;
+const LEADKIT_GIFT_GRACE     = 10 * MINUTE_IN_SECONDS;
 const LEADKIT_GIFTS_PER_RUN  = 25;
 const LEADKIT_GIFTS_REMEMBER = 3000;
 
@@ -186,6 +188,9 @@ function leadkit_link_gifts() {
 
 		// 1. The person: theirs already, found by email, or made.
 		if ( ! $g['person'] ) {
+			if ( $g['age'] < LEADKIT_GIFT_GRACE ) {
+				continue; // Zapier and the email match go first; both creating at once makes two people.
+			}
 			if ( ! $g['email'] ) {
 				if ( $g['age'] > LEADKIT_GIFT_WAIT ) {
 					$done[ $g['id'] ] = time(); // Nothing to go on.

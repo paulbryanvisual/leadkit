@@ -120,8 +120,9 @@ moving an existing site onto the plugin needs no re-typing.
 == Changelog ==
 
 = 1.6.0 =
-* Gift linker: finds or creates donors on People, connects each gift's browser
-  to its person, and fills Open person links — every 15 minutes.
+* Gift linker: finds or creates donors on People (after giving Zapier 10
+  minutes), connects each gift's browser to its person, and fills Open person
+  links — every 15 minutes.
 * Open person links on form submissions, Visitors and Visits rows, and gifts.
 * Return visits keep the Visitors and Visits boards current.
 * The page a form is sent from is part of the journey.

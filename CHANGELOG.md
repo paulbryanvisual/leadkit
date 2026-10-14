@@ -7,8 +7,10 @@ The connections monday.com cannot make by itself, made by LeadKit.
 - **Gift linker** (Settings → LeadKit → monday.com Donations board, with a
   People board). Every 15 minutes LeadKit reads the newest 100 gifts and, for
   up to 25 it has not finished:
-  1. no Person: finds the donor on People by Donor email (any case), or
-     creates them, and sets the gift's Person;
+  1. no Person 10 minutes after the gift arrived: finds the donor on People
+     by Donor email (any case), or creates them, and sets the gift's Person.
+     The wait lets the Zap's own find-or-create and the email match go first;
+     LeadKit creating the donor while the Zap does would make two people;
   2. fills the gift's **Open person** link;
   3. a Visitor whose row has no Person: gives that browser the gift's
      person, with Open person on its row and its visit rows, and LeadKit's own
@@ -39,11 +41,19 @@ The connections monday.com cannot make by itself, made by LeadKit.
   two-way; People's new "Donations" column fills itself and Total given sums
   it. The old one-way column is renamed "Donations (old – one-way)".
 
+How the work splits with the 3SGF Zap (Give Lively → Code → Create Item on
+Donations → Find Items on People → Filter "not found" → Create Item on People
+→ Update Item on Donations): the Zap creates a new donor and fills that
+gift's Person and Open person at once. For a returning donor the Filter stops
+the Zap, the email match fills Person, and LeadKit fills Open person. LeadKit
+alone gives the gift's browser its person, and is the backstop when a Zap
+step fails.
+
 Tried and rejected:
 
-- Zapier creating the person: its monday.com search ("Find Items", formerly
-  "Get Item by Column Value") has no create-if-not-found; doing it in Zapier
-  takes Find Items + a Filter or Paths step + Create Item per gift.
+- Zapier creating the person in one step: its monday.com search ("Find
+  Items", formerly "Get Item by Column Value") has no create-if-not-found, so
+  the Zap needs Find Items + a Filter + Create Item (Paths are not needed).
 - monday.com's match automation creating the person: the template's only
   options are overwrite or add a match; it never creates.
 - monday.com automations giving the gift's browser the gift's person: that
