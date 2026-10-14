@@ -40,6 +40,16 @@
 	var CLICK_IDS = [ 'gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid' ];
 	var GOOGLE_CLICK_IDS = [ 'gclid', 'gbraid', 'wbraid' ];
 	var SEARCH_ENGINES = [ 'google', 'bing', 'duckduckgo', 'yahoo', 'ecosia', 'baidu', 'yandex' ];
+	// The hosts that are each engine's search (domains already without www.).
+	var SEARCH_HOSTS = {
+		google: /^google\.[a-z]{2,3}(?:\.[a-z]{2})?$/,
+		bing: /(?:^|\.)bing\.com$/,
+		duckduckgo: /^duckduckgo\.com$/,
+		yahoo: /^(?:[a-z.]+\.)?search\.yahoo\.com$|^yahoo\.com$/,
+		ecosia: /^ecosia\.org$/,
+		baidu: /^baidu\.com$/,
+		yandex: /^yandex\.[a-z]{2,3}$/,
+	};
 	// Positional packing (medium__source__campaign__content) for history strings.
 	var PACK_SEP = '__';
 	/*
@@ -310,14 +320,28 @@
 				changed = true;
 			}
 
-			if ( ! this.data.referrer && document.referrer ) {
-				try {
-					var ref = new URL( document.referrer );
-					if ( ref.host && ref.host !== window.location.host && ! this.isDonationUrl( ref ) ) {
-						this.data.referrer = ref.host;
-						changed = true;
-					}
-				} catch ( e ) {}
+			/*
+			 * The outside site that sent this landing, every time — not only
+			 * the first. `referrer` stays the first ever (forms have always
+			 * sent it); `first_referrer` is the very first visit's ('' when it
+			 * was typed in); `referrers` is each landing from another site,
+			 * newest last. A second landing from the same site within half an
+			 * hour is the same visit, not a new one.
+			 */
+			var refDomain = this.referrerDomain();
+			if ( ! ( 'first_referrer' in this.data ) && ! ( this.data.page_views || [] ).length ) {
+				this.data.first_referrer = refDomain;
+				changed = true;
+			}
+			if ( refDomain ) {
+				if ( ! this.data.referrer ) this.data.referrer = refDomain;
+				var refs = this.data.referrers = this.data.referrers || [];
+				var lastRef = refs[ refs.length - 1 ];
+				if ( ! ( lastRef && lastRef.domain === refDomain && Date.now() - Date.parse( lastRef.time ) < 30 * 6e4 ) ) {
+					refs.push( { domain: refDomain, time: new Date().toISOString(), landing: window.location.pathname } );
+					if ( refs.length > 30 ) refs.splice( 0, refs.length - 30 );
+				}
+				changed = true;
 			}
 
 			/*
@@ -398,23 +422,70 @@
 		}
 
 		/**
-		 * The fields that get the credit right now: the latest campaign, or —
-		 * with none — organic search, another site, or direct, so the source
-		 * always says something.
+		 * The fields that get the credit right now.
 		 *
-		 * @return {Object} { medium, source, campaign?, content?, term? }
+		 * The latest campaign keeps it, even over a later visit from a search
+		 * engine: the question these links answer is which email or post
+		 * brought the donor. With no campaign, the source is filled the way
+		 * Google Analytics fills it, from the latest outside site that sent
+		 * them — medium organic and the engine's name for a search engine,
+		 * medium referral and the domain for any other site — and left empty
+		 * for someone who only ever typed the address in.
+		 *
+		 * @return {Object} { medium, source, campaign?, content?, term? } or {}
 		 */
 		creditFields() {
 			var t = this.attribution();
 			if ( t ) return t;
-			if ( this.data.referrer ) {
-				var host = this.data.referrer.replace( /^www\./, '' );
-				var organic = SEARCH_ENGINES.some( function ( s ) {
-					return host === s || host.indexOf( s + '.' ) === 0 || host.indexOf( '.' + s + '.' ) !== -1;
-				} );
-				return { medium: organic ? 'organic' : 'referral', source: host };
+			var refs = this.data.referrers || [];
+			return this.referrerFields( refs.length ? refs[ refs.length - 1 ].domain : this.cleanDomain( this.data.referrer ) );
+		}
+
+		/** organic + engine, referral + domain, or {} for no outside site. */
+		referrerFields( domain ) {
+			if ( ! domain ) return {};
+			var engine = this.searchEngine( domain );
+			return engine ? { medium: 'organic', source: engine } : { medium: 'referral', source: domain };
+		}
+
+		/*
+		 * A search engine's own name, or ''. Search hosts only: mail.google.com
+		 * (Gmail on the web) and news.google.com are sites that sent someone,
+		 * not a search.
+		 */
+		searchEngine( domain ) {
+			var d = String( domain || '' );
+			var hit = '';
+			SEARCH_ENGINES.some( function ( s ) {
+				if ( SEARCH_HOSTS[ s ].test( d ) ) hit = s;
+				return !! hit;
+			} );
+			return hit;
+		}
+
+		/** A host as a domain: lowercase, without www., m., l. and the like. */
+		cleanDomain( host ) {
+			return String( host || '' ).toLowerCase().replace( /:\d+$/, '' ).replace( /^(?:www\d?|m|l|lm|mobile|amp)\./, '' );
+		}
+
+		/**
+		 * The domain of the outside site that sent this page view, or ''.
+		 * Not this site (or its subdomains), not the donation form coming
+		 * back, not an outside form redirecting back, not an app.
+		 */
+		referrerDomain() {
+			if ( ! document.referrer ) return '';
+			try {
+				var ref = new URL( document.referrer );
+				if ( ref.protocol !== 'https:' && ref.protocol !== 'http:' ) return '';
+				var host = this.cleanDomain( ref.hostname );
+				var own = this.cleanDomain( window.location.hostname );
+				if ( ! host || host === own || host.slice( -( own.length + 1 ) ) === '.' + own ) return '';
+				if ( this.isDonationUrl( ref ) || this.isFormUrl( ref ) ) return '';
+				return host;
+			} catch ( e ) {
+				return '';
 			}
-			return { medium: 'direct', source: 'website' };
 		}
 
 		/**
@@ -938,10 +1009,11 @@
 			var returns = ( d.events || [] ).filter( function ( e ) {
 				return e.type === 'donation_return';
 			} );
-			return {
+			var body = {
 				visitor_id: d.id,
 				started_at: d.started_at,
 				referrer: d.referrer || '',
+				referrers: ( d.referrers || [] ).slice( -30 ),
 				utm: d.utm || {},
 				utm_first: d.utm_first || {},
 				utm_touches: ( d.utm_touches || [] ).slice( -30 ),
@@ -955,6 +1027,9 @@
 				} ),
 				timezone: this.timeZone(),
 			};
+			// Absent on sessions from before 1.5, where the first visit is unknown.
+			if ( 'first_referrer' in d ) body.first_referrer = d.first_referrer;
+			return body;
 		}
 
 		/**

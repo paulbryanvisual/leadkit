@@ -257,11 +257,14 @@ class LkMonday {
 	public static $next   = 9000;
 	/** @var callable|null Return non-null to answer a call yourself (e.g. an error). */
 	public static $fault = null;
+	/** @var callable|null ( alias, op, args ) => true to refuse that one mutation of a batch. */
+	public static $aliasFault = null;
 
 	public static function reset() {
 		self::$boards = array();
-		self::$calls  = array();
-		self::$fault  = null;
+		self::$calls      = array();
+		self::$fault      = null;
+		self::$aliasFault = null;
 	}
 	public static function board( $id, $cols ) {
 		self::$boards[ (string) $id ] = array( 'cols' => $cols, 'items' => array() );
@@ -278,6 +281,40 @@ class LkMonday {
 			}
 		}
 		$err = fn( $m ) => array( 'errors' => array( array( 'message' => $m ) ) );
+
+		// Several aliased mutations in one request: each answered on its own;
+		// a refused one is null with an error, the rest still happen.
+		if ( preg_match_all( '/(\w+): (create_item|change_multiple_column_values)\(([^)]*)\)/', $q, $ms, PREG_SET_ORDER ) ) {
+			$data   = array();
+			$errors = array();
+			foreach ( $ms as $m ) {
+				$args = array();
+				foreach ( explode( ',', $m[3] ) as $pair ) {
+					list( $k, $val ) = array_map( 'trim', explode( ':', $pair, 2 ) );
+					$args[ $k ]      = '$' === $val[0] ? ( $v[ substr( $val, 1 ) ] ?? null ) : $val;
+				}
+				$b = (string) $args['board_id'];
+				if ( self::$aliasFault && ( self::$aliasFault )( $m[1], $m[2], $args ) ) {
+					$data[ $m[1] ] = null;
+					$errors[]      = array( 'message' => 'refused ' . $m[1] );
+					continue;
+				}
+				if ( 'create_item' === $m[2] ) {
+					$id                                = (string) ( self::$next++ );
+					self::$boards[ $b ]['items'][ $id ] = array( 'name' => $args['item_name'], 'values' => json_decode( $args['column_values'] ?? '{}', true ) ?: array() );
+					$data[ $m[1] ]                     = array( 'id' => $id );
+				} elseif ( isset( self::$boards[ $b ]['items'][ (string) $args['item_id'] ] ) ) {
+					foreach ( json_decode( $args['column_values'], true ) as $col => $val ) {
+						self::$boards[ $b ]['items'][ (string) $args['item_id'] ]['values'][ $col ] = $val;
+					}
+					$data[ $m[1] ] = array( 'id' => $args['item_id'] );
+				} else {
+					$data[ $m[1] ] = null;
+					$errors[]      = array( 'message' => 'Item not found in board' );
+				}
+			}
+			return array( 'data' => $data ) + ( $errors ? array( 'errors' => $errors ) : array() );
+		}
 
 		if ( false !== strpos( $q, 'columns { id title' ) ) {
 			$out = array();
@@ -300,7 +337,11 @@ class LkMonday {
 			$hits = array();
 			foreach ( self::$boards[ (string) $v['b'] ]['items'] ?? array() as $id => $it ) {
 				if ( in_array( (string) ( $it['values'][ $v['c'] ] ?? '' ), $v['v'], true ) ) {
-					$hits[] = array( 'id' => (string) $id );
+					$hit = array( 'id' => (string) $id );
+					if ( isset( $v['r'] ) ) {
+						$hit['column_values'] = array_map( fn( $c ) => array( 'text' => (string) ( $it['values'][ $c ] ?? '' ) ), $v['r'] );
+					}
+					$hits[] = $hit;
 				}
 			}
 			return array( 'data' => array( 'items_page_by_column_values' => array( 'items' => $hits ) ) );

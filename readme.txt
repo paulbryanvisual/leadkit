@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -62,6 +62,7 @@ is set (the tracker gets no URL otherwise). Queued in the browser and resent
 on the next page load until a 2xx (or a 4xx other than 429):
   { visitor_id, started_at, referrer, utm, utm_first, utm_touches (last 30),
     page_views (last 100: id, path, active_time_ms, max_scroll_percent, time),
+    referrers (last 30: domain, time, landing), first_referrer (when known),
     donate_clicks: [ { id, time, path, how: "link"|"widget" } ],
     lead_forms, donation_returns: [ { time, path } ], timezone }
 Answers 200 once the row is written (or already said the same), 400/413 for
@@ -91,6 +92,9 @@ campaign credited when the visitor came back from the donation host).
   on each Donate click and form submission: First and Last seen, Visits, First
   and Latest source, Donate clicks, Journey log, and connected to its form
   submissions and its person. Missing columns are created.
+* monday.com Visits board — with a Visitors board, one row per visit (pages
+  with no gap over 30 minutes), connected to its visitor: Started, Referrer,
+  Source, Landing page, Pages, Seconds on site, Donate clicks, Forms, Journey.
 * Untracked pages — path prefixes (e.g. /help/) where the tracker is not
   loaded and nothing is recorded or sent.
 * Form hosts — comma-separated domains of outside forms that take hidden
@@ -109,6 +113,14 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.5.0 =
+* The referring site is recorded on every landing; with no campaign the source
+  is medium.organic__source.<engine> or medium.referral__source.<domain>, and
+  nothing for typed-in visits. A campaign keeps the credit over a later visit.
+* Visitors board: First referrer and Latest referrer.
+* monday.com Visits board: one row per visit, with its referrer and source,
+  connected to the visitor's row.
 
 = 1.4.0 =
 * Donation links carry labeled pairs with the visitor id:

@@ -663,12 +663,12 @@ function leadkit_unpack_source( $raw ) {
 
 /**
  * Who gets the credit, as tracker.js works it out: the latest campaign (inside
- * the campaign-credit window, if one is set), else organic search, another
- * site, or direct.
+ * the campaign-credit window, if one is set) — even over a later visit from a
+ * search engine — else the latest outside site that sent them, else nothing.
  *
  * @param array $analytics Decoded analyticsData (or a Visitors post).
- * @param bool  $first     The first campaign instead of the latest.
- * @return array medium, source, campaign, content, term.
+ * @param bool  $first     The first campaign and first visit's site instead.
+ * @return array medium, source, campaign, content, term — or empty for typed-in.
  */
 function leadkit_credit_fields( $analytics, $first = false ) {
 	$t = $analytics[ $first ? 'utm_first' : 'utm' ] ?? array();
@@ -682,11 +682,93 @@ function leadkit_credit_fields( $analytics, $first = false ) {
 	if ( $has ) {
 		return array_intersect_key( $t, array_flip( array( 'medium', 'source', 'campaign', 'content', 'term' ) ) );
 	}
+	return leadkit_referrer_fields( $first ? leadkit_first_referrer( $analytics ) : leadkit_latest_referrer( $analytics ) );
+}
 
-	$ref = preg_replace( '/^www\./', '', strtolower( (string) ( $analytics['referrer'] ?? '' ) ) );
-	if ( $ref ) {
-		$organic = (bool) preg_match( '/(^|\.)(google|bing|duckduckgo|yahoo|ecosia|baidu|yandex)(\.|$)/', $ref );
-		return array( 'medium' => $organic ? 'organic' : 'referral', 'source' => $ref );
+/**
+ * The source the way Google Analytics fills it for a visit with no campaign:
+ * medium organic and the engine's name for a search engine, medium referral
+ * and the domain for any other site, nothing for a typed-in visit.
+ *
+ * @param string $domain Referring domain, or ''.
+ * @return array
+ */
+function leadkit_referrer_fields( $domain ) {
+	$domain = leadkit_clean_domain( $domain );
+	if ( '' === $domain ) {
+		return array();
 	}
-	return array( 'medium' => 'direct', 'source' => 'website' );
+	$engine = leadkit_search_engine( $domain );
+	return $engine ? array( 'medium' => 'organic', 'source' => $engine ) : array( 'medium' => 'referral', 'source' => $domain );
+}
+
+/**
+ * A host as a domain: lowercase, no port, without www., m., l. and the like
+ * (l.facebook.com and m.facebook.com are both facebook.com).
+ *
+ * @param string $host Host.
+ * @return string
+ */
+function leadkit_clean_domain( $host ) {
+	$host = strtolower( trim( (string) $host ) );
+	$host = preg_replace( '/:\d+$/', '', $host );
+	$host = preg_replace( '/^(?:www\d?|m|l|lm|mobile|amp)\./', '', $host );
+	return preg_replace( '/[^a-z0-9.-]/', '', $host );
+}
+
+/**
+ * A search engine's own name, or ''. Search hosts only — mail.google.com
+ * (Gmail on the web) is a site that sent someone, not a search. The same
+ * hosts as SEARCH_HOSTS in tracker.js.
+ *
+ * @param string $domain Clean domain.
+ * @return string
+ */
+function leadkit_search_engine( $domain ) {
+	$hosts = array(
+		'google'     => '/^google\.[a-z]{2,3}(?:\.[a-z]{2})?$/',
+		'bing'       => '/(?:^|\.)bing\.com$/',
+		'duckduckgo' => '/^duckduckgo\.com$/',
+		'yahoo'      => '/^(?:[a-z.]+\.)?search\.yahoo\.com$|^yahoo\.com$/',
+		'ecosia'     => '/^ecosia\.org$/',
+		'baidu'      => '/^baidu\.com$/',
+		'yandex'     => '/^yandex\.[a-z]{2,3}$/',
+	);
+	foreach ( $hosts as $engine => $re ) {
+		if ( preg_match( $re, (string) $domain ) ) {
+			return $engine;
+		}
+	}
+	return '';
+}
+
+/**
+ * The site that sent the visitor on their first visit; '' if they typed it in.
+ * Sessions from before 1.5 never recorded that, so their first outside site
+ * stands in.
+ *
+ * @param array $analytics Session.
+ * @return string Domain.
+ */
+function leadkit_first_referrer( $analytics ) {
+	return leadkit_clean_domain( array_key_exists( 'first_referrer', $analytics ) ? $analytics['first_referrer'] : ( $analytics['referrer'] ?? '' ) );
+}
+
+/**
+ * The latest outside site that sent the visitor, or ''.
+ *
+ * @param array $analytics Session.
+ * @return string Domain.
+ */
+function leadkit_latest_referrer( $analytics ) {
+	$latest = '';
+	$at     = 0;
+	foreach ( (array) ( $analytics['referrers'] ?? array() ) as $r ) {
+		$t = is_array( $r ) ? strtotime( (string) ( $r['time'] ?? '' ) ) : 0;
+		if ( $t && $t >= $at ) {
+			$at     = $t;
+			$latest = (string) ( $r['domain'] ?? '' );
+		}
+	}
+	return leadkit_clean_domain( $latest ?: ( $analytics['referrer'] ?? '' ) );
 }

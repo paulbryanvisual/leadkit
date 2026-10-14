@@ -92,6 +92,8 @@ function leadkit_visitor_columns( $board ) {
 		'lsrc'   => array( 'Latest source', 'text' ),
 		'clicks' => array( 'Donate clicks', 'numbers' ),
 		'log'    => array( 'Journey log', 'long_text' ),
+		'fref'   => array( 'First referrer', 'text' ),
+		'lref'   => array( 'Latest referrer', 'text' ),
 	);
 	$people = leadkit_monday_people_board();
 	if ( $people ) {
@@ -296,6 +298,8 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		'forms'   => array(),
 		'returns' => array(),
 		'touches' => array(),
+		'refs'    => array(),
+		'visits'  => array(), // visitid => { row, hash } on the Visits board.
 		'items'   => array(), // Submissions still to connect.
 		'person'  => '',      // Person still to connect.
 		'linked'  => '',      // Person already connected.
@@ -314,7 +318,8 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		return '';
 	}
 
-	$visits = leadkit_visitor_visits( $st['views'] );
+	$visits  = leadkit_visitor_visits( $st['views'] );
+	$details = leadkit_visits_details( $visits, $st );
 	$times  = array_merge(
 		array_map( fn( $v ) => strtotime( $v['time'] ), $st['views'] ),
 		array_map( fn( $c ) => strtotime( $c['time'] ), $st['clicks'] )
@@ -331,7 +336,9 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		$cols['fsrc']   => leadkit_pack_source( leadkit_credit_fields( $data, true ) ),
 		$cols['lsrc']   => leadkit_pack_source( leadkit_credit_fields( $data ) ),
 		$cols['clicks'] => (string) count( $st['clicks'] ),
-		$cols['log']    => array( 'text' => leadkit_visitor_log( $visits, $st ) ),
+		$cols['log']    => array( 'text' => leadkit_visitor_log( $details ) ),
+		$cols['fref']   => leadkit_first_referrer( $data ),
+		$cols['lref']   => leadkit_latest_referrer( $data ),
 	);
 	$hash = md5( (string) wp_json_encode( $values ) );
 
@@ -374,6 +381,9 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 	}
 	$st['row']  = $row;
 	$st['hash'] = $hash;
+
+	// A row per visit on the Visits board, connected to this one.
+	leadkit_visits_write( $visitor, $row, $details, $st );
 
 	/*
 	 * The connections, each in its own request: a submission on a board the
@@ -487,83 +497,132 @@ function leadkit_visitor_merge( $st, $data ) {
 	}
 	$st['returns'] = array_slice( $st['returns'], -50, null, true );
 
-	// Campaign arrivals, to say where each visit came from.
+	// Campaign arrivals and arrivals from other sites, to say where each
+	// visit came from.
 	foreach ( (array) ( $data['utm_touches'] ?? array() ) as $u ) {
 		$t = is_array( $u ) ? strtotime( (string) ( $u['time'] ?? '' ) ) : 0;
 		if ( ! $t ) {
 			continue;
 		}
-		$label = leadkit_source_label(
-			array(
-				'utm_medium'   => sanitize_text_field( (string) ( $u['medium'] ?? '' ) ),
-				'utm_source'   => sanitize_text_field( (string) ( $u['source'] ?? '' ) ),
-				'utm_campaign' => sanitize_text_field( (string) ( $u['campaign'] ?? '' ) ),
-				'utm_content'  => sanitize_text_field( (string) ( $u['content'] ?? '' ) ),
-			)
-		);
-		if ( 'Direct' !== $label ) {
-			$st['touches'][ gmdate( 'c', $t ) ] = $label;
+		$fields = array();
+		foreach ( array( 'medium', 'source', 'campaign', 'content', 'term' ) as $k ) {
+			$fields[ $k ] = substr( sanitize_text_field( (string) ( $u[ $k ] ?? '' ) ), 0, 100 );
+		}
+		if ( array_filter( $fields ) ) {
+			$st['touches'][ gmdate( 'c', $t ) ] = $fields;
 		}
 	}
+	$st['touches'] = array_filter( $st['touches'], 'is_array' ); // 1.4.0 kept labels here.
+	ksort( $st['touches'] );
 	$st['touches'] = array_slice( $st['touches'], -50, null, true );
+
+	foreach ( (array) ( $data['referrers'] ?? array() ) as $r ) {
+		$t      = is_array( $r ) ? strtotime( (string) ( $r['time'] ?? '' ) ) : 0;
+		$domain = is_array( $r ) ? leadkit_clean_domain( $r['domain'] ?? '' ) : '';
+		if ( $t && $domain ) {
+			$st['refs'][ gmdate( 'c', $t ) ] = $domain;
+		}
+	}
+	ksort( $st['refs'] );
+	$st['refs'] = array_slice( $st['refs'], -50, null, true );
 
 	return $st;
 }
 
 /**
- * Page views as visits: a new visit starts when the visitor has been away
- * more than 30 minutes from the end of their time on the last page.
+ * One visit, worked out once for both the Journey log line and its row on
+ * the Visits board: when, from where, and what happened, in order.
  *
- * @param array $views id => view.
- * @return array[] Visits, oldest first, each a list of views in order.
+ * @param array $views The visit's views, in order (from leadkit_visitor_visits()).
+ * @param array $events [ time, label, kind ] that fall in this visit.
+ * @param array $st     State (touches, refs).
+ * @return array start, end, referrer, fields, label, pages, ms, clicks, forms, items
  */
-function leadkit_visitor_visits( $views ) {
-	uasort( $views, fn( $a, $b ) => strcmp( $a['time'], $b['time'] ) );
-	$visits = array();
-	$until  = 0;
-	foreach ( $views as $v ) {
-		$t = strtotime( $v['time'] );
-		if ( ! $visits || $t - $until > LEADKIT_VISIT_GAP ) {
-			$visits[] = array();
+function leadkit_visit_details( $views, $events, $st ) {
+	$start = strtotime( $views[0]['time'] );
+	$last  = end( $views );
+	$end   = strtotime( $last['time'] ) + (int) round( $last['ms'] / 1000 );
+
+	// Where it came from: a campaign link it arrived on, else the outside
+	// site that sent it. A minute either side, for clocks and redirects.
+	$in       = fn( $time ) => strtotime( $time ) >= $start - 60 && strtotime( $time ) <= $end + 60;
+	$referrer = '';
+	foreach ( $st['refs'] as $time => $domain ) {
+		if ( $in( $time ) ) {
+			$referrer = $domain;
+			break;
 		}
-		$visits[ count( $visits ) - 1 ][] = $v;
-		$until = max( $until, $t + (int) round( $v['ms'] / 1000 ) );
 	}
-	return $visits;
+	$fields = array();
+	foreach ( $st['touches'] as $time => $t ) {
+		if ( $in( $time ) ) {
+			$fields = $t;
+			break;
+		}
+	}
+	if ( $fields ) {
+		$label = leadkit_source_label( array_combine( array_map( fn( $k ) => 'utm_' . $k, array_keys( $fields ) ), $fields ) );
+	} else {
+		$fields = leadkit_referrer_fields( $referrer );
+		$label  = $referrer ? leadkit_source_label( array( 'referrer' => $referrer ) ) : '';
+	}
+
+	$items = array();
+	foreach ( $views as $v ) {
+		$items[] = array( strtotime( $v['time'] ), $v['path'] . ' ' . round( $v['ms'] / 1000 ) . 's ' . $v['scroll'] . '%', 0 );
+	}
+	$clicks = 0;
+	$forms  = array();
+	foreach ( $events as $e ) {
+		$items[] = array( $e[0], $e[1], 1 );
+		if ( 'click' === $e[2] ) {
+			++$clicks;
+		} elseif ( 'form' === $e[2] ) {
+			$forms[] = $e[3];
+		}
+	}
+	// By time; a page before what happened on it.
+	usort( $items, fn( $a, $b ) => $a[0] <=> $b[0] ?: $a[2] <=> $b[2] );
+
+	return array(
+		'start'    => $start,
+		'end'      => $end,
+		'first'    => (string) $views[0]['id'],
+		'landing'  => (string) $views[0]['path'],
+		'referrer' => $referrer,
+		'fields'   => $fields,
+		'label'    => $label,
+		'pages'    => count( $views ),
+		'ms'       => array_sum( array_column( $views, 'ms' ) ),
+		'clicks'   => $clicks,
+		'forms'    => array_values( array_unique( $forms ) ),
+		'items'    => array_column( $items, 1 ),
+	);
 }
 
 /**
- * The Journey log: one line per visit, newest first, in the visitor's time.
- *
- *   Oct 14, 2026 9:58pm — Email · light-the-path · email-1 — 3 pages, 2m 5s:
- *   /hope/ 45s 80% > /donate/ 12s 30% > Donate click
- *
- * Form submissions, Donate clicks and returns from the donation form sit in
- * the visit where they happened. Kept within monday.com's long-text limit by
- * dropping the oldest visits, with a count of what was left off.
+ * Every visit, worked out: events placed in the visit where they happened.
  *
  * @param array[] $visits From leadkit_visitor_visits().
- * @param array   $st     State (clicks, forms, returns, touches).
- * @return string
+ * @param array   $st     State.
+ * @return array[] From leadkit_visit_details(), oldest first.
  */
-function leadkit_visitor_log( $visits, $st ) {
+function leadkit_visits_details( $visits, $st ) {
 	$events = array();
 	foreach ( $st['clicks'] as $c ) {
-		$events[] = array( strtotime( $c['time'] ), __( 'Donate click', 'leadkit' ) );
+		$events[] = array( strtotime( $c['time'] ), __( 'Donate click', 'leadkit' ), 'click', '' );
 	}
 	foreach ( $st['forms'] as $f ) {
-		$label = array(
+		$name = array(
 			'phone_click' => __( 'Tapped the phone number', 'leadkit' ),
 			'email_click' => __( 'Tapped the email address', 'leadkit' ),
-		)[ $f['form'] ] ?? sprintf(
-			/* translators: %s: form name. */
-			__( 'Sent %s', 'leadkit' ),
-			$f['form'] ?: __( 'a form', 'leadkit' )
-		);
-		$events[] = array( strtotime( $f['time'] ), $label );
+		)[ $f['form'] ] ?? '';
+		$sent     = $f['form'] ?: __( 'a form', 'leadkit' );
+		/* translators: %s: form name. */
+		$events[] = array( strtotime( $f['time'] ), $name ?: sprintf( __( 'Sent %s', 'leadkit' ), $sent ), 'form', $name ?: $sent );
 	}
 	foreach ( array_keys( $st['returns'] ) as $time ) {
-		$events[] = array( strtotime( $time ), __( 'Back from the donation form', 'leadkit' ) );
+		$events[] = array( strtotime( $time ), __( 'Back from the donation form', 'leadkit' ), 'return', '' );
 	}
 
 	// Each event goes in the last visit that started before it.
@@ -579,35 +638,59 @@ function leadkit_visitor_log( $visits, $st ) {
 		$extra[ $i ][] = $e;
 	}
 
-	$lines = array();
+	$out = array();
 	foreach ( $visits as $n => $views ) {
-		$items = array();
-		foreach ( $views as $v ) {
-			$items[] = array( strtotime( $v['time'] ), $v['path'] . ' ' . round( $v['ms'] / 1000 ) . 's ' . $v['scroll'] . '%', 0 );
-		}
-		foreach ( $extra[ $n ] as $e ) {
-			$items[] = array( $e[0], $e[1], 1 );
-		}
-		// By time; a page before what happened on it.
-		usort( $items, fn( $a, $b ) => $a[0] <=> $b[0] ?: $a[2] <=> $b[2] );
+		$out[] = leadkit_visit_details( $views, $extra[ $n ], $st );
+	}
+	return $out;
+}
 
-		$start = $starts[ $n ];
-		$end   = strtotime( end( $views )['time'] );
-		$from  = '';
-		foreach ( $st['touches'] as $time => $label ) {
-			$t = strtotime( $time );
-			if ( $t >= $start - 60 && $t <= $end + 60 ) {
-				$from = $label;
-				break;
-			}
+/**
+ * Page views as visits: a new visit starts when the visitor has been away
+ * more than 30 minutes from the end of their time on the last page.
+ *
+ * @param array $views id => view.
+ * @return array[] Visits, oldest first, each a list of views (with their id) in order.
+ */
+function leadkit_visitor_visits( $views ) {
+	uasort( $views, fn( $a, $b ) => strcmp( $a['time'], $b['time'] ) );
+	$visits = array();
+	$until  = 0;
+	foreach ( $views as $id => $v ) {
+		$t = strtotime( $v['time'] );
+		if ( ! $visits || $t - $until > LEADKIT_VISIT_GAP ) {
+			$visits[] = array();
 		}
-		$ms      = array_sum( array_column( $views, 'ms' ) );
-		$lines[] = leadkit_vdate( 'M j, Y g:ia', $start ) . ' — '
-			. ( $from ? $from . ' — ' : '' )
+		$visits[ count( $visits ) - 1 ][] = $v + array( 'id' => (string) $id );
+		$until = max( $until, $t + (int) round( $v['ms'] / 1000 ) );
+	}
+	return $visits;
+}
+
+/**
+ * The Journey log: one line per visit, newest first, in the visitor's time.
+ *
+ *   Oct 14, 2026 9:58pm — Email · light-the-path · email-1 — 3 pages, 2m 5s:
+ *   /hope/ 45s 80% > /donate/ 12s 30% > Donate click
+ *
+ * Each visit says where it came from — the campaign link it arrived on, or
+ * the site that sent it. Form submissions, Donate clicks and returns from the
+ * donation form sit in the visit where they happened. Kept within
+ * monday.com's long-text limit by dropping the oldest visits, with a count of
+ * what was left off.
+ *
+ * @param array[] $details From leadkit_visits_details().
+ * @return string
+ */
+function leadkit_visitor_log( $details ) {
+	$lines = array();
+	foreach ( $details as $d ) {
+		$lines[] = leadkit_vdate( 'M j, Y g:ia', $d['start'] ) . ' — '
+			. ( $d['label'] ? $d['label'] . ' — ' : '' )
 			/* translators: %d: number of pages. */
-			. sprintf( _n( '%d page', '%d pages', count( $views ), 'leadkit' ), count( $views ) )
-			. ', ' . leadkit_duration( $ms ) . ': '
-			. implode( ' > ', array_column( $items, 1 ) );
+			. sprintf( _n( '%d page', '%d pages', $d['pages'], 'leadkit' ), $d['pages'] )
+			. ', ' . leadkit_duration( $d['ms'] ) . ': '
+			. implode( ' > ', $d['items'] );
 	}
 
 	/**
@@ -701,4 +784,206 @@ function leadkit_visitor_linked( $row, $col ) {
 		return null;
 	}
 	return array_map( 'intval', (array) ( $data['items'][0]['column_values'][0]['linked_item_ids'] ?? array() ) );
+}
+
+// ---- the Visits board: one row per visit -------------------------------------------
+
+const LEADKIT_VISITS_PER_WRITE   = 40;
+const LEADKIT_VISITS_PER_REQUEST = 20;
+
+/**
+ * The Visits board id, if set. It needs the Visitors board too: each visit
+ * row is connected to its visitor's row there.
+ *
+ * @return string
+ */
+function leadkit_monday_visits_board() {
+	return leadkit_monday_visitors_board() ? preg_replace( '/\D/', '', (string) ( leadkit_options()['monday_visits_board'] ?? '' ) ) : '';
+}
+
+/**
+ * The Visits board's columns, found by title or created.
+ *
+ * @param string $board Visits board id.
+ * @return array|null
+ */
+function leadkit_visit_columns( $board ) {
+	return leadkit_monday_ensure_columns(
+		$board,
+		array(
+			'key'      => array( 'visitid', 'text' ),
+			'visitor'  => array( 'visitorid', 'text' ),
+			'link'     => array( 'Visitor', 'board_relation', array( 'boardIds' => array( (int) leadkit_monday_visitors_board() ), 'allowMultipleItems' => false ) ),
+			'started'  => array( 'Started', 'date' ),
+			'referrer' => array( 'Referrer', 'text' ),
+			'source'   => array( 'Source', 'text' ),
+			'landing'  => array( 'Landing page', 'text' ),
+			'pages'    => array( 'Pages', 'numbers' ),
+			'secs'     => array( 'Seconds on site', 'numbers' ),
+			'clicks'   => array( 'Donate clicks', 'numbers' ),
+			'forms'    => array( 'Forms', 'text' ),
+			'journey'  => array( 'Journey', 'long_text' ),
+		),
+		'visits'
+	);
+}
+
+/**
+ * A visit's key: the browser, plus the visit's first page view, which never
+ * changes as the visit goes on.
+ *
+ * @param string $visitor  Visitor id.
+ * @param string $first_id Id of the visit's first page view.
+ * @return string
+ */
+function leadkit_visit_key( $visitor, $first_id ) {
+	return $visitor . '-' . substr( md5( (string) $first_id ), 0, 10 );
+}
+
+/**
+ * "Oct 14, 2026 9:58am · Email · light-the-path · email-1", or "· Direct".
+ *
+ * @param array $d From leadkit_visit_details().
+ * @return string
+ */
+function leadkit_visit_name( $d ) {
+	return mb_substr( leadkit_vdate( 'M j, Y g:ia', $d['start'] ) . ' · ' . ( $d['label'] ?: __( 'Direct', 'leadkit' ) ), 0, 255 );
+}
+
+/**
+ * A visit's column values.
+ *
+ * @param string $visitor Visitor id.
+ * @param string $row     The visitor's row on the Visitors board.
+ * @param string $key     Visit key.
+ * @param array  $d       From leadkit_visit_details().
+ * @param array  $cols    Column ids.
+ * @return array
+ */
+function leadkit_visit_values( $visitor, $row, $key, $d, $cols ) {
+	return array(
+		$cols['key']      => $key,
+		$cols['visitor']  => $visitor,
+		$cols['link']     => array( 'item_ids' => array( (int) $row ) ),
+		// monday stores date columns in UTC and shows them in each viewer's zone.
+		$cols['started']  => array( 'date' => gmdate( 'Y-m-d', $d['start'] ), 'time' => gmdate( 'H:i:s', $d['start'] ) ),
+		$cols['referrer'] => $d['referrer'],
+		$cols['source']   => leadkit_pack_source( $d['fields'] ),
+		$cols['landing']  => mb_substr( $d['landing'], 0, 2000 ),
+		$cols['pages']    => (string) $d['pages'],
+		$cols['secs']     => (string) (int) round( $d['ms'] / 1000 ),
+		$cols['clicks']   => (string) $d['clicks'],
+		$cols['forms']    => mb_substr( implode( ', ', $d['forms'] ), 0, 2000 ),
+		$cols['journey']  => array( 'text' => mb_substr( implode( ' > ', $d['items'] ), 0, LEADKIT_VISITOR_LOG_MAX ) ),
+	);
+}
+
+/**
+ * Write the visits that are new or have changed, newest first.
+ *
+ * At most LEADKIT_VISITS_PER_WRITE per call, LEADKIT_VISITS_PER_REQUEST to a
+ * request: a first Donate click can bring a long history with it, and what
+ * does not fit is written on the visitor's next post. A visit this site has
+ * no row for is looked up by visitid first, so lost local state cannot
+ * double a row.
+ *
+ * @param string  $visitor Visitor id.
+ * @param string  $row     The visitor's row on the Visitors board.
+ * @param array[] $details From leadkit_visits_details().
+ * @param array   $st      State (by reference: visits).
+ * @return int Rows written.
+ */
+function leadkit_visits_write( $visitor, $row, $details, &$st ) {
+	$board = leadkit_monday_visits_board();
+	if ( ! $board || ! $row || ! $details ) {
+		return 0;
+	}
+	$cols = leadkit_visit_columns( $board );
+	if ( ! $cols ) {
+		return 0;
+	}
+
+	/**
+	 * How many visit rows one write may create or change. Default 40.
+	 *
+	 * @param int $max Rows.
+	 */
+	$max  = max( 1, (int) apply_filters( 'leadkit/visits_per_write', LEADKIT_VISITS_PER_WRITE ) );
+	$todo = array();
+	foreach ( array_reverse( $details ) as $d ) {
+		$key    = leadkit_visit_key( $visitor, $d['first'] );
+		$values = leadkit_visit_values( $visitor, $row, $key, $d, $cols );
+		$hash   = md5( (string) wp_json_encode( $values ) );
+		if ( ( $st['visits'][ $key ]['hash'] ?? '' ) === $hash ) {
+			continue;
+		}
+		$todo[ $key ] = array( 'values' => $values, 'hash' => $hash, 'name' => leadkit_visit_name( $d ) );
+		if ( count( $todo ) >= $max ) {
+			break;
+		}
+	}
+	if ( ! $todo ) {
+		return 0;
+	}
+
+	$unknown = array_values( array_filter( array_keys( $todo ), fn( $k ) => empty( $st['visits'][ $k ]['row'] ) ) );
+	if ( $unknown ) {
+		$found = leadkit_monday(
+			'query ($b: ID!, $c: String!, $v: [String]!, $r: [String!]) { items_page_by_column_values(board_id: $b, limit: 100, columns: [{column_id: $c, column_values: $v}]) { items { id column_values(ids: $r) { text } } } }',
+			array( 'b' => (string) $board, 'c' => $cols['key'], 'v' => $unknown, 'r' => array( $cols['key'] ) )
+		);
+		if ( null === $found ) {
+			return 0; // Could not ask: creating now could double rows.
+		}
+		foreach ( (array) ( $found['items_page_by_column_values']['items'] ?? array() ) as $it ) {
+			$k = (string) ( $it['column_values'][0]['text'] ?? '' );
+			if ( isset( $todo[ $k ] ) ) {
+				$st['visits'][ $k ] = array( 'row' => (string) $it['id'], 'hash' => '' );
+			}
+		}
+	}
+
+	$written = 0;
+	foreach ( array_chunk( $todo, LEADKIT_VISITS_PER_REQUEST, true ) as $chunk ) {
+		$decl  = array( '$b: ID!' );
+		$body  = array();
+		$vars  = array( 'b' => (string) $board );
+		$alias = array();
+		$i     = 0;
+		foreach ( $chunk as $key => $w ) {
+			$decl[]          = '$v' . $i . ': JSON!';
+			$vars[ 'v' . $i ] = wp_json_encode( $w['values'] );
+			$known           = (string) ( $st['visits'][ $key ]['row'] ?? '' );
+			if ( $known ) {
+				$decl[]           = '$i' . $i . ': ID!';
+				$vars[ 'i' . $i ] = $known;
+				$body[]           = 'u' . $i . ': change_multiple_column_values(item_id: $i' . $i . ', board_id: $b, column_values: $v' . $i . ') { id }';
+				$alias[ $key ]    = 'u' . $i;
+			} else {
+				$decl[]           = '$n' . $i . ': String!';
+				$vars[ 'n' . $i ] = $w['name'];
+				$body[]           = 'c' . $i . ': create_item(board_id: $b, item_name: $n' . $i . ', column_values: $v' . $i . ') { id }';
+				$alias[ $key ]    = 'c' . $i;
+			}
+			++$i;
+		}
+		$data = leadkit_monday( 'mutation (' . implode( ', ', $decl ) . ') { ' . implode( ' ', $body ) . ' }', $vars, true );
+		if ( null === $data ) {
+			break; // monday.com unreachable: the rest wait for the next post.
+		}
+		foreach ( $alias as $key => $a ) {
+			$id = (string) ( $data[ $a ]['id'] ?? '' );
+			if ( $id ) {
+				$st['visits'][ $key ] = array( 'row' => $id, 'hash' => $chunk[ $key ]['hash'] );
+				++$written;
+			} elseif ( 'u' === $a[0] ) {
+				// The row is gone (deleted on monday.com): found or made again next time.
+				unset( $st['visits'][ $key ] );
+			}
+		}
+	}
+	if ( count( $st['visits'] ) > LEADKIT_VISITOR_VIEWS ) {
+		$st['visits'] = array_slice( $st['visits'], -LEADKIT_VISITOR_VIEWS, null, true );
+	}
+	return $written;
 }

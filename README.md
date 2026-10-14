@@ -21,7 +21,8 @@ campaign is stamped onto donation links with the visitor id, packed into
 `medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>` —
 because Give Lively keeps only that field. With a monday.com Visitors board
 set, each Donate click and form submission keeps that visitor's row current,
-so a gift can be joined to the visits before it. Pages listed as untracked
+so a gift can be joined to the visits before it — and with a Visits board,
+each visit gets a row of its own with the site that sent it. Pages listed as untracked
 (a Get Help page) get no tracker at all.
 
 ## The server side is not in here
