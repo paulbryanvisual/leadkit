@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.7.0
+
+Every visit kept in Cloudflare D1; only warm or known browsers come to
+monday.com.
+
+- **Visits Worker URL** (Settings → LeadKit, empty by default). With it set,
+  the tracker posts the browser's story straight to that Cloudflare Worker
+  each time a page is hidden or left, for every browser, not only after a
+  Donate click or a form. WordPress and its database never see that
+  traffic. Sent as text/plain, so there is no CORS preflight: one request
+  per post.
+- **The Worker** (deployed per client in the client's Cloudflare account) keeps one row per browser
+  in D1 and decides which are warm: came back (2 visits by default),
+  arrived on a campaign link, clicked Donate, sent a form, or marked known.
+  It forgets cold browsers after 13 months unseen. Those rules are its
+  settings, not WordPress's.
+- **Warm browsers come to monday.com.** Every 15 minutes
+  (`leadkit_send_warm`, on `leadkit_quarter_hour`) LeadKit fetches up to 25
+  warm browsers whose story changed (`GET /warm`) and writes each with the
+  same writer a Donate click uses, so the Visitors row and every Visits row
+  arrive at once, earlier anonymous visits included. Then it reports them
+  sent by hash (`POST /sent`), so a story that changed meanwhile stays
+  pending. One monday.com refused is not reported and is tried again next
+  run. The batch size is the `leadkit/browsers_per_run` filter.
+- **A new Visitors row is marked known** in the Worker (`POST /known`, fire
+  and forget), so that browser stays warm from then on.
+- **The secret** for the Worker's private routes: `LEADKIT_VISITS_SECRET` in
+  wp-config.php, or the write-only **Visits Worker secret** setting. The
+  monday.com token never leaves WordPress.
+- The settings screen shows the Worker's counts: browsers kept, warm, sent
+  and waiting (cached five minutes).
+- `scripts/check-browsers.php` checks the WordPress side against a fake
+  Worker.
+
+Needs a real cron on cached hosts, as the gift linker does (SiteGround:
+wp-cron.php every 15 minutes).
+
 ## 1.6.0
 
 The connections monday.com cannot make by itself, made by LeadKit.

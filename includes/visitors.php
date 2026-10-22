@@ -381,6 +381,9 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		update_option( $key, $st, false );
 		return '';
 	}
+	if ( $row !== (string) $st['row'] ) {
+		leadkit_visits_mark_known( $visitor ); // New on the board: warm in D1 from now on.
+	}
 	$st['row']  = $row;
 	$st['hash'] = $hash;
 

@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.6.0
+ * Version:           1.7.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan Visual
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.6.0' );
+define( 'LEADKIT_VERSION', '1.7.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -45,6 +45,7 @@ require_once LEADKIT_DIR . '/includes/monday-stops.php';
 require_once LEADKIT_DIR . '/includes/monday-people.php';
 require_once LEADKIT_DIR . '/includes/monday-crm.php';
 require_once LEADKIT_DIR . '/includes/visitors.php';
+require_once LEADKIT_DIR . '/includes/browsers.php';
 require_once LEADKIT_DIR . '/includes/gifts.php';
 require_once LEADKIT_DIR . '/includes/monday-form.php';
 
@@ -67,6 +68,10 @@ function leadkit_options() {
 		'monday_visitors_board' => '',
 		'monday_visits_board' => '',
 		'monday_donations_board' => '',
+		// Every visit kept in Cloudflare D1 by the Visits Worker; warm or
+		// known browsers come to monday.com.
+		'visits_url'        => '',
+		'visits_secret'     => '',
 		'untracked_paths'   => '',
 		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
@@ -108,11 +113,12 @@ function leadkit_options() {
 	return $opts;
 }
 
-/** The gift linker's 15-minute schedule goes with the plugin. */
+/** The 15-minute schedules (gift linker, warm browsers) go with the plugin. */
 register_deactivation_hook(
 	__FILE__,
 	function () {
 		wp_clear_scheduled_hook( 'leadkit_link_gifts' );
+		wp_clear_scheduled_hook( 'leadkit_send_warm' );
 	}
 );
 
@@ -236,6 +242,8 @@ add_action(
 					'trackUrl'      => $opts['track_url'],
 					// Only where there is a Visitors board to write to.
 					'visitorUrl'    => leadkit_visitors_enabled() ? rest_url( LEADKIT_REST_NS . '/visitor' ) : '',
+					// Only with a Visits Worker set: every visit goes straight there.
+					'visitsUrl'     => leadkit_visits_post_url(),
 					'packPairSep'   => leadkit_pack_pair_sep(),
 					// So pages recorded there before the setting are dropped too.
 					'untrackedPaths' => leadkit_untracked_paths(),

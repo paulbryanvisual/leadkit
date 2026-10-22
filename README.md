@@ -22,7 +22,11 @@ campaign is stamped onto donation links with the visitor id, packed into
 because Give Lively keeps only that field. With a monday.com Visitors board
 set, each Donate click and form submission keeps that visitor's row current,
 so a gift can be joined to the visits before it — and with a Visits board,
-each visit gets a row of its own with the site that sent it. Pages listed as untracked
+each visit gets a row of its own with the site that sent it. With a **Visits
+Worker** set, every browser's visits go to a Cloudflare Worker that keeps
+them in D1, and the ones that turn warm (come back, arrive on a campaign
+link, click Donate or send a form) come to those boards with their whole
+history. Pages listed as untracked
 (a Get Help page) get no tracker at all.
 
 ## The server side is not in here
@@ -63,6 +67,7 @@ mean re-typing its settings. Harmless anywhere those never existed.
 ```bash
 php scripts/check-packing.php
 php scripts/check-visitors.php
+php scripts/check-browsers.php
 NODE_PATH=/path/to/node_modules node scripts/check-tracker.js   # needs jsdom
 ```
 

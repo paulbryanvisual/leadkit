@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -68,6 +68,19 @@ on the next page load until a 2xx (or a 4xx other than 429):
 Answers 200 once the row is written (or already said the same), 400/413 for
 a body it will never take, 429 when braked, 502 when monday.com failed.
 
+Visits Worker (`<Visits Worker URL>/visit`) — POST from every browser each
+time a page is hidden or left, when a Visits Worker URL is set (the tracker
+gets no URL otherwise). The same body as leadkit/v1/visitor, sent as
+text/plain (no CORS preflight) and not queued, since the next post carries
+everything. The Worker keeps it in Cloudflare D1. WordPress calls the
+Worker's private routes with `Authorization: Bearer <LEADKIT_VISITS_SECRET>`:
+  GET /warm?limit=25   { browsers: [ { visitor, hash, story } ] }, the warm
+                       browsers whose story changed
+  POST /sent           { sent: [ { visitor, hash } ] }, cleared only where
+                       the hash still matches
+  POST /known          { visitors: [ id ] }, a browser now on the Visitors board
+  GET /stats           { browsers, warm, pending, sent }
+
 The packed source on donation links: key.value pairs in this order, "__"
 between pairs (or "-" with the leadkit/packed_pair_separator filter), empty
 pairs left out, values folded to [a-z0-9] and single dashes:
@@ -118,6 +131,14 @@ On first activation the plugin seeds its settings from the legacy
 moving an existing site onto the plugin needs no re-typing.
 
 == Changelog ==
+
+= 1.7.0 =
+* Visits Worker: every browser's visits go straight to a Cloudflare Worker
+  that keeps them in D1, anonymous ones included; nothing touches
+  WordPress. Every 15 minutes LeadKit fetches the browsers that turned warm
+  (came back, arrived on a campaign link, clicked Donate or sent a form) and
+  writes them to the Visitors and Visits boards with their whole history.
+  Off until a Worker URL is set.
 
 = 1.6.0 =
 * Gift linker: finds or creates donors on People (after giving Zapier 10
