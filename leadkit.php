@@ -6,7 +6,8 @@
  * Version:           1.7.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
- * Author:            Paul Bryan Visual
+ * Author:            Paul Bryan, PrettyGrand.com
+ * Author URI:        https://prettygrand.com/
  * License:           GPL-2.0-or-later
  * Text Domain:       leadkit
  * Update URI:        https://github.com/paulbryanvisual/leadkit

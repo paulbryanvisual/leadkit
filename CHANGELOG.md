@@ -36,6 +36,10 @@ monday.com.
   not slow the screen down; saving the settings asks again.
 - `scripts/check-browsers.php` checks the WordPress side against a fake
   Worker.
+- **Generic out of the box.** No client's name or address in the plugin's
+  own text: help-text examples are example.org, and the notes here name no
+  site. Every difference between sites is in Settings → LeadKit. By Paul
+  Bryan, PrettyGrand.com (the plugin header and the update details).
 
 Needs a real cron on cached hosts, as the gift linker does (SiteGround:
 wp-cron.php every 15 minutes).
@@ -75,13 +79,13 @@ The connections monday.com cannot make by itself, made by LeadKit.
   the page before packing the session into the form.
 - Visit rows are written after the browser's person is connected, so they
   can carry the person's link.
-- On the 3SGF sandbox: Donations' Person column was a one-way connection, so
+- On a sandbox: Donations' Person column was a one-way connection, so
   People's Total given never counted a gift whose Person was set by the
   automation or Zapier (only gifts linked from both sides by hand). It is now
   two-way; People's new "Donations" column fills itself and Total given sums
   it. The old one-way column is renamed "Donations (old – one-way)".
 
-How the work splits with the 3SGF Zap (Give Lively → Code → Create Item on
+How the work splits with a donations Zap (Give Lively → Code → Create Item on
 Donations → Find Items on People → Filter "not found" → Create Item on People
 → Update Item on Donations): the Zap creates a new donor and fills that
 gift's Person and Open person at once. For a returning donor the Filter stops
@@ -147,15 +151,15 @@ Where each visit came from, one row per visit.
   longer call Gmail an organic search.
 - `leadkit_monday()` can return what succeeded in a request where part
   failed (`$partial`), for batches of aliased mutations.
-- On the 3SGF sandbox: DEMO – Visits (18435475074) was created with these
-  columns; its connection made "link to DEMO – Visits" on Visitors, renamed
+- On a sandbox: a Visits board was created with these
+  columns; its connection made a "link to …" column on Visitors, renamed
   "Visit rows" — not "Visits", which is already the count column there, and
   columns are found by title.
 
 ## 1.4.0
 
 Every Give Lively gift can now be joined to the visits and forms before it.
-Built for the 3Strands "Light the Path" plan: a gift arrives on a monday.com
+Built for a nonprofit's giving plan: a gift arrives on a monday.com
 Donations board through Zapier, and its packed source carries the same visitor
 id the forms send.
 
@@ -205,8 +209,8 @@ id the forms send.
 - **Untracked pages** (Settings → LeadKit). Path prefixes, e.g. `/help/`,
   where the tracker is not loaded at all — nothing recorded, nothing posted.
   Anything a browser recorded there before is purged from its storage and
-  dropped by the server. `leadkit/track_page` filters it per request. On
-  3sgf.org the tracker was loading on Get Help (/help/) until this is set.
+  dropped by the server. `leadkit/track_page` filters it per request. Until
+  it is set, the tracker loads on every page, help pages included.
 - The endpoint is public, as it must be: it only writes the row of the id it
   is given, refuses bodies over 64 KB, and brakes per IP (30 posts per ten
   minutes, five new rows an hour). The monday.com token never leaves
@@ -300,8 +304,8 @@ Tried and rejected:
 
 ## 1.3.0
 
-Campaign tracking that survives the trip to a donation form. Built for the
-3Strands "Light the Path" appeal, where the question is which email or post a
+Campaign tracking that survives the trip to a donation form. Built for a
+nonprofit's year-end appeal, where the question is which email or post a
 gift came from, and the gift happens on Give Lively — which keeps one tracking
 field, `utm_source`, and drops the rest.
 

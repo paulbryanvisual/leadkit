@@ -1,5 +1,7 @@
 # LeadKit — Lead Form & Visitor Tracking
 
+By Paul Bryan, [PrettyGrand.com](https://prettygrand.com/).
+
 The lead-capture form and first-party visitor tracker, packaged to travel
 between projects. `readme.txt` is the WordPress-facing version of this and
 carries the full payload contract; this is the short version.

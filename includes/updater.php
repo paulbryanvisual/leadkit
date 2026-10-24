@@ -248,7 +248,7 @@ add_filter(
 			'name'          => 'LeadKit',
 			'slug'          => $args->slug,
 			'version'       => $latest['version'],
-			'author'        => '<a href="https://github.com/' . LEADKIT_GH_OWNER . '">Paul Bryan Visual</a>',
+			'author'        => '<a href="https://prettygrand.com/">Paul Bryan, PrettyGrand.com</a>',
 			'homepage'      => $latest['url'],
 			'download_link' => $latest['zip'],
 			'last_updated'  => $latest['published'],

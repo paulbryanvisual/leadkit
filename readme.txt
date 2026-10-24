@@ -139,6 +139,9 @@ moving an existing site onto the plugin needs no re-typing.
   (came back, arrived on a campaign link, clicked Donate or sent a form) and
   writes them to the Visitors and Visits boards with their whole history.
   Off until a Worker URL is set.
+* Generic out of the box: no client's name or address in the plugin's text;
+  every difference between sites is a setting. By Paul Bryan,
+  PrettyGrand.com.
 
 = 1.6.0 =
 * Gift linker: finds or creates donors on People (after giving Zapier 10
