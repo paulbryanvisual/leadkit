@@ -27,7 +27,7 @@ Two pieces, one plugin:
   clicks, rage clicks, campaign (UTM) touches. Nothing is sent for anonymous
   visitors. The latest campaign is stamped onto donation links (Give Lively by
   default) with the visitor id, packed into utm_source as labeled pairs:
-  medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+  medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
   Give Lively's embedded widgets (Branded and Simple) get it too.
   The session attaches to the lead at the moment one identifies themself: it is
   injected into the form as a hidden `analyticsData` field on submit, and the
@@ -157,7 +157,7 @@ campaign credited when the visitor came back from the donation host).
 
 = 1.4.0 =
 * Donation links carry labeled pairs with the visitor id:
-  medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+  medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
   Give Lively's Branded and Simple widgets get the same.
 * monday.com Visitors board: one row per browser, updated on every Donate click
   and form submission, connected to the submission and the person.

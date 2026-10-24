@@ -16,7 +16,7 @@
  * site sets a limit), and it is stamped onto every donation link (Give
  * Lively by default) packed into utm_source, the only field Give Lively keeps,
  * as labeled pairs with the visitor id:
- *   medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+ *   medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
  * Each Donate click is posted to visitorUrl, which keeps the visitor's row on
  * a monday.com Visitors board; a post that fails is queued and resent on the
  * next page load. window.LeadKitAnalytics.attribution() / .packedSource()
@@ -533,7 +533,7 @@
 		 * Give Lively records utm_source and drops the rest, so the five fields
 		 * and this visitor's id travel packed into it as labeled pairs:
 		 *
-		 *   medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+		 *   medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
 		 *
 		 * A period between key and value, "__" between pairs, empty pairs left
 		 * out, always in this order. Values are folded to lowercase letters,
@@ -604,9 +604,9 @@
 		/**
 		 * Every campaign this visitor has arrived from, oldest first, in one
 		 * string — for a single form field a report can filter on ("contains
-		 * light-the-path") or read as the visitor's path:
+		 * spring-appeal") or read as the visitor's path:
 		 *
-		 *   email__mailchimp__light-the-path__email-1 > social__instagram__light-the-path__post-3
+		 *   email__mailchimp__spring-appeal__email-1 > social__instagram__spring-appeal__post-3
 		 *
 		 * Each touch is packed by position (medium__source__campaign__content),
 		 * as form reports have always split it; only donation links use the

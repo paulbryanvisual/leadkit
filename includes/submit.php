@@ -614,7 +614,7 @@ function leadkit_pack_value( $v ) {
 /**
  * Labeled packing — the same as tracker.js writes onto donation links:
  *
- *   medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+ *   medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
  *
  * Fixed key names in a fixed order, empty pairs left out.
  *

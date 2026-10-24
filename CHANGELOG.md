@@ -141,7 +141,7 @@ Where each visit came from, one row per visit.
   zone), Referrer, Source (the campaign link the visit arrived on, else the
   site that sent it, else blank), Landing page, Pages, Seconds on site,
   Donate clicks, Forms and the Journey. Named "Oct 14, 2026 9:58am · Email ·
-  light-the-path · email-1". Written with the Visitors row, earlier visits
+  spring-appeal · email-1". Written with the Visitors row, earlier visits
   from the browser's story included: up to 40 a write, 20 to a request,
   newest first, the rest on the next post. A visit this site has no row for
   is looked up by visitid first, so lost local state cannot double a row; a
@@ -167,7 +167,7 @@ id the forms send.
 
 - **Labeled packed source on donation links.** `utm_source` is now key.value
   pairs with the visitor id, in a fixed order, empty pairs left out:
-  `medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>`.
+  `medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>`.
   Values fold to lowercase letters, numbers and single dashes (`google.com`
   becomes `google-com`), so neither separator can appear inside one. Every
   stamp carries the visitor id, including direct visitors
@@ -326,7 +326,7 @@ field, `utm_source`, and drops the rest.
 - **Donation links carry the campaign.** Every link to a donation host
   (`givelively.org` by default; Settings → LeadKit → Donation hosts) gets the
   campaign packed into `utm_source` as `medium__source__campaign__content`,
-  e.g. `email__mailchimp__light-the-path__email-1`. Rewritten on load, on
+  e.g. `email__mailchimp__spring-appeal__email-1`. Rewritten on load, on
   links added later, and again at the moment of the click. Give Lively widgets
   (`data-widget-src`) and donation iframes are covered too. With no campaign
   the source still says something: `organic__google.com`, `referral__<host>`
