@@ -80,6 +80,10 @@ Worker's private routes with `Authorization: Bearer <LEADKIT_VISITS_SECRET>`:
                        the hash still matches
   POST /known          { visitors: [ id ] }, a browser now on the Visitors board
   GET /stats           { browsers, warm, pending, sent }
+Which browsers are warm is the Worker's WARM_RULES setting: by default
+donate, form and known (a browser on the Visitors board); returning and
+campaign can be added. A browser WordPress has written stays warm, so its
+new visits keep coming.
 
 The packed source on donation links: key.value pairs in this order, "__"
 between pairs (or "-" with the leadkit/packed_pair_separator filter), empty

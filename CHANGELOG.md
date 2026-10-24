@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Visits stay in Cloudflare D1 until a browser reaches a goal: the help text
+  and readme now describe the Visits Worker's `WARM_RULES` setting (by default
+  donate, form and known; returning and campaign can be added) instead of
+  listing returning visitors and campaign arrivals as warm. A browser
+  WordPress has written stays warm, so its new visits keep coming.
+
 ## 1.7.0
 
 Every visit kept in Cloudflare D1; only warm or known browsers come to

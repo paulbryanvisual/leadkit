@@ -7,8 +7,10 @@
  * tracker posts the browser's story straight to the Worker each time a page
  * is hidden or left — anonymous visitors included — so neither WordPress nor
  * its database sees that traffic. The Worker (its routes are in readme.txt) keeps one
- * row per browser in D1 and decides which are "warm": come back (2 visits by
- * default), arrived on a campaign link, clicked Donate or sent a form.
+ * row per browser in D1 and decides which are "warm" by its WARM_RULES
+ * setting: by default a Donate click, a form, or a browser WordPress has
+ * marked known; returning visitors and campaign arrivals can be added. Until
+ * then a browser's visits stay in D1 only.
  *
  * Every 15 minutes LeadKit asks the Worker for the warm browsers whose story
  * changed (GET /warm), writes each to the Visitors and Visits boards with

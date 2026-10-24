@@ -26,9 +26,9 @@ set, each Donate click and form submission keeps that visitor's row current,
 so a gift can be joined to the visits before it — and with a Visits board,
 each visit gets a row of its own with the site that sent it. With a **Visits
 Worker** set, every browser's visits go to a Cloudflare Worker that keeps
-them in D1, and the ones that turn warm (come back, arrive on a campaign
-link, click Donate or send a form) come to those boards with their whole
-history. Pages listed as untracked
+them in D1 until the browser reaches a goal (by default a Donate click or a
+form; the Worker's WARM_RULES setting decides), then it comes to those boards
+with its whole history. Pages listed as untracked
 (a Get Help page) get no tracker at all.
 
 ## The server side is not in here
