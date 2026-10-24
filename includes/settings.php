@@ -44,6 +44,32 @@ function leadkit_keep_secret( $submitted, $key ) {
 	return '' === $submitted ? $existing : $submitted;
 }
 
+/**
+ * Resolve the Visits Worker URL on save: https, with no query or fragment.
+ *
+ * Anything else is refused with a notice and the URL saved before is kept,
+ * so a typo cannot quietly stop every visit being kept. An empty box turns
+ * it off.
+ *
+ * @param string $submitted What the form sent.
+ * @return string
+ */
+function leadkit_clean_visits_url( $submitted ) {
+	$url = trim( (string) $submitted );
+	if ( '' === $url ) {
+		return '';
+	}
+	if ( preg_match( '#^https://[^/\s"\'<>?\#][^\s"\'<>?\#]*$#', $url ) ) {
+		return esc_url_raw( $url, array( 'https' ) );
+	}
+	add_settings_error(
+		'leadkit_options',
+		'leadkit_visits_url',
+		__( 'Visits Worker URL not saved: it must start with https:// and have no ? or #, e.g. https://visits.example.org. The URL it had is kept; the other settings were saved.', 'leadkit' )
+	);
+	return (string) ( get_option( 'leadkit_options', array() )['visits_url'] ?? '' );
+}
+
 
 /**
  * Sanitise a comma-separated list of recipients.
@@ -105,6 +131,8 @@ add_action(
 						'monday_visitors_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_visitors_board'] ?? '' ), $vb ) ? $vb[0] : '',
 						'monday_visits_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_visits_board'] ?? '' ), $vs ) ? $vs[0] : '',
 						'monday_donations_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_donations_board'] ?? '' ), $db ) ? $db[0] : '',
+						'visits_url'        => leadkit_clean_visits_url( $raw['visits_url'] ?? '' ),
+						'visits_secret'     => leadkit_keep_secret( $raw['visits_secret'] ?? '', 'visits_secret' ),
 						// Paths, each with slashes both ends: "/help/". A lone "/" is everything.
 						'untracked_paths'   => implode( ', ', array_unique( array_filter( array_map( function ( $p ) {
 							$p = preg_replace( '#[^a-z0-9/._~%-]#', '', (string) wp_parse_url( strtolower( trim( (string) $p ) ), PHP_URL_PATH ) );
@@ -157,9 +185,9 @@ function leadkit_render_settings_page() {
 		'turnstile_actions'   => array( __( 'Accepted Turnstile actions', 'leadkit' ), __( 'Comma-separated. Must match the data-action on your widgets. A token minted for a different action is refused. Empty falls back to leadkit-form.', 'leadkit' ) ),
 		'turnstile_hostnames' => array( __( 'Extra Turnstile hostnames', 'leadkit' ), __( 'Comma-separated, ADDED to this site’s own hostname, which is always accepted. Only add hosts you serve the form from. Never add localhost here on a production site — a token solved anywhere would then be accepted, which is the check gone.', 'leadkit' ) ),
 		'turnstile_fail_open' => array( __( 'Accept if Cloudflare is unreachable', 'leadkit' ), __( 'Off (recommended): a submission is refused when Turnstile cannot be reached. On: it is accepted unverified — fewer lost enquiries during a Cloudflare outage, but an attacker who can block that call turns the check off.', 'leadkit' ), 'checkbox' ),
-		'donation_hosts'    => array( __( 'Donation hosts', 'leadkit' ), __( 'Comma-separated domains whose links get the visitor’s campaign added, packed into utm_source as labeled pairs with the visitor id: medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.… Subdomains match, so givelively.org covers secure.givelively.org. Add data-leadkit-keep to a link to leave it alone. Empty turns stamping off.', 'leadkit' ) ),
+		'donation_hosts'    => array( __( 'Donation hosts', 'leadkit' ), __( 'Comma-separated domains whose links get the visitor’s campaign added, packed into utm_source as labeled pairs with the visitor id: medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.… Subdomains match, so givelively.org covers secure.givelively.org. Add data-leadkit-keep to a link to leave it alone. Empty turns stamping off.', 'leadkit' ) ),
 		'form_hosts'        => array( __( 'Form hosts', 'leadkit' ), __( 'Comma-separated domains of outside forms that take hidden fields (default forms.monday.com, wkf.ms). Links and embeds to them get utm_source, utm_medium, utm_campaign, utm_content and utm_term for the campaign with the credit, plus the full campaign history. On a monday.com form, add a form tag with each of those names to capture them as columns. Empty turns it off.', 'leadkit' ) ),
-		'history_param'     => array( __( 'History parameter', 'leadkit' ), __( 'Name of the parameter carrying every campaign the visitor arrived from, oldest first, e.g. email__mailchimp__light-the-path__email-1 > social__instagram__light-the-path__post-3. Default campaign_history. Empty leaves it off.', 'leadkit' ) ),
+		'history_param'     => array( __( 'History parameter', 'leadkit' ), __( 'Name of the parameter carrying every campaign the visitor arrived from, oldest first, e.g. email__mailchimp__spring-appeal__email-1 > social__instagram__spring-appeal__post-3. Default campaign_history. Empty leaves it off.', 'leadkit' ) ),
 		'attribution_days'  => array( __( 'Campaign credit (days)', 'leadkit' ), __( 'How long the latest campaign link a visitor arrived from keeps the credit. 0 (the default) means for as long as their browser keeps the data; a newer campaign always replaces it. Every campaign touch is kept either way.', 'leadkit' ) ),
 		'notify_returns'    => array( __( 'Email me when a lead comes back', 'leadkit' ), __( 'Once a day at most per lead: when someone who already sent the form (or tapped the phone number) visits again, email the pages they looked at. The visits are saved on the lead either way.', 'leadkit' ), 'checkbox' ),
 		'monday_token'      => array( __( 'monday.com API token', 'leadkit' ), __( 'From monday.com: your avatar → Developers → My access tokens. Used only on the server, to add return visits to the matching monday.com item. Never shown again once saved; leave empty to keep it, a single - clears it. Or define LEADKIT_MONDAY_TOKEN in wp-config.php.', 'leadkit' ), 'secret' ),
@@ -168,6 +196,8 @@ function leadkit_render_settings_page() {
 		'monday_visitors_board' => array( __( 'monday.com Visitors board', 'leadkit' ), __( 'Optional. A board id for one row per browser, keyed by a visitorid column — the same id the forms send and every donation link carries. Each Donate click and form submission updates the row: First and Last seen, Visits, First and Latest source, First and Latest referrer, Donate clicks and the Journey log, and connects it to the submission (Form submissions) and the person (Person, with a People board). Missing columns are created. Gifts connect to the row from the Donations board, by an automation matching visitorid.', 'leadkit' ) ),
 		'monday_visits_board' => array( __( 'monday.com Visits board', 'leadkit' ), __( 'Optional, with a Visitors board. A board id for one row per visit — a run of pages with no gap over 30 minutes — connected to its row on the Visitors board: Started, Referrer (the site that sent the visit), Source, Landing page, Pages, Seconds on site, Donate clicks, Forms and the Journey. Written with the Visitors row, earlier visits included. Missing columns are created.', 'leadkit' ) ),
 		'monday_donations_board' => array( __( 'monday.com Donations board', 'leadkit' ), __( 'Optional, with a People board. The board gifts arrive on (from Zapier). Every 15 minutes LeadKit links the newest gifts the way monday.com automations cannot: it finds or creates the donor on People by Donor email when nothing connected them, gives the gift\'s browser on the Visitors board the same person, and fills the Open person links. Its Person column must be a two-way connection for People\'s Total given to count gifts.', 'leadkit' ) ),
+		'visits_url'        => array( __( 'Visits Worker URL', 'leadkit' ), __( 'Optional, with a Visitors board. The Cloudflare Worker that keeps every browser\'s visits in D1, e.g. https://visits.example.org. The tracker posts every visit straight to it, anonymous visitors included, so none of that traffic or data touches WordPress. Every 15 minutes LeadKit fetches the browsers that turned warm — came back, arrived on a campaign link, clicked Donate or sent a form (the rules are the Worker\'s settings) — and writes them to the Visitors and Visits boards with their whole history. Empty turns it off. Make sure the privacy policy says the site keeps visit history per browser.', 'leadkit' ) ),
+		'visits_secret'     => array( __( 'Visits Worker secret', 'leadkit' ), __( 'The Worker\'s SYNC_SECRET. Better in wp-config.php as LEADKIT_VISITS_SECRET, which takes precedence. Never shown again once saved; leave empty to keep it, a single - clears it.', 'leadkit' ), 'secret' ),
 		'untracked_paths'   => array( __( 'Untracked pages', 'leadkit' ), __( 'Paths where nothing is tracked and nothing is sent — pages someone at risk might use, like /help/. Comma-separated; each covers the pages under it (/help/ covers /help/hotline/ but not /helpful/). The tracker is not loaded there at all, and those pages are dropped from anything a browser recorded there before.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
@@ -277,6 +307,23 @@ define( 'LEADKIT_TURNSTILE_SECRET', '0x4AAA…' );</pre>
 			</table>
 			<?php submit_button(); ?>
 		</form>
+		<?php
+		$leadkit_counts = leadkit_browsers_enabled() && leadkit_visits_secret() ? leadkit_browsers_counts() : null;
+		if ( $leadkit_counts ) :
+			?>
+		<p class="description">
+			<?= esc_html(
+				sprintf(
+					/* translators: 1: browsers kept, 2: warm, 3: sent to monday.com, 4: waiting to be sent. */
+					__( 'Visits Worker: %1$d browsers kept, %2$d warm, %3$d sent to monday.com, %4$d waiting for the next run.', 'leadkit' ),
+					$leadkit_counts['browsers'],
+					$leadkit_counts['warm'],
+					$leadkit_counts['sent'],
+					$leadkit_counts['pending']
+				)
+			) ?>
+		</p>
+		<?php endif; ?>
 		<p>
 			<?= esc_html__( 'Render the form with the [leadkit_form] shortcode, or from a theme with leadkit_form( ["class_prefix" => "your-prefix"] ). The endpoint payload contract is documented in the plugin’s readme.txt.', 'leadkit' ) ?>
 		</p>

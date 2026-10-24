@@ -20,7 +20,7 @@
  * the first time, so the People board can start empty.
  *
  * In Salesforce terms: People is Contact, each submission is the record that
- * relates to it — so the same data moves across when 3SGF is ready.
+ * relates to it — so the same data moves across if a site moves to a CRM.
  *
  * @package LeadKit
  */

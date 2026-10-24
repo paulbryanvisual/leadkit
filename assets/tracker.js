@@ -16,7 +16,7 @@
  * site sets a limit), and it is stamped onto every donation link (Give
  * Lively by default) packed into utm_source, the only field Give Lively keeps,
  * as labeled pairs with the visitor id:
- *   medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+ *   medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
  * Each Donate click is posted to visitorUrl, which keeps the visitor's row on
  * a monday.com Visitors board; a post that fails is queued and resent on the
  * next page load. window.LeadKitAnalytics.attribution() / .packedSource()
@@ -34,6 +34,7 @@
 	var SYNC_URL = typeof cfg.syncUrl === 'string' ? cfg.syncUrl : '';
 	var TRACK_URL = typeof cfg.trackUrl === 'string' ? cfg.trackUrl : '';
 	var VISITOR_URL = typeof cfg.visitorUrl === 'string' ? cfg.visitorUrl : '';
+	var VISITS_URL = typeof cfg.visitsUrl === 'string' ? cfg.visitsUrl : '';
 	var SUBMIT_ACTION = cfg.submitAction || '/api/submit';
 
 	var UTM_KEYS = [ 'source', 'medium', 'campaign', 'content', 'term' ];
@@ -225,6 +226,42 @@
 				} );
 			} catch ( e ) {
 				console.error( 'Analytics sync failed', e );
+			}
+		}
+
+		/**
+		 * Every visit, anonymous ones included (a Visits Worker set): the
+		 * whole recent story, each time the page is hidden or left, straight
+		 * to the Cloudflare Worker that keeps it in D1. WordPress later takes
+		 * only the warm or known browsers on to monday.com. hidden and
+		 * pagehide fire together, so a story that has not changed since the
+		 * last post is not sent again; one that is lost is covered by the
+		 * next, since the Worker merges. Sent as text/plain, a "simple"
+		 * request: no CORS preflight, so one request per post, not two.
+		 */
+		postVisit() {
+			if ( ! VISITS_URL || ! this.data.id ) return;
+			this.recordPageView();
+			var views = this.data.page_views || [];
+			if ( ! views.length ) return;
+			var last = views[ views.length - 1 ];
+			var sig = [ views.length, last.id, last.active_time_ms, last.max_scroll_percent, ( this.data.donate_clicks || [] ).length, ( this.data.lead_forms || [] ).length ].join( '|' );
+			if ( sig === this.lastVisitSig ) return;
+			this.lastVisitSig = sig;
+			var json = JSON.stringify( this.visitorBody() );
+			try {
+				fetch( VISITS_URL, {
+					method: 'POST',
+					headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+					body: json,
+					keepalive: true,
+					credentials: 'omit',
+					mode: 'cors',
+				} ).catch( function () {} );
+			} catch ( e ) {
+				try {
+					if ( navigator.sendBeacon ) navigator.sendBeacon( VISITS_URL, new Blob( [ json ], { type: 'text/plain;charset=UTF-8' } ) );
+				} catch ( e2 ) {}
 			}
 		}
 
@@ -496,7 +533,7 @@
 		 * Give Lively records utm_source and drops the rest, so the five fields
 		 * and this visitor's id travel packed into it as labeled pairs:
 		 *
-		 *   medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+		 *   medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
 		 *
 		 * A period between key and value, "__" between pairs, empty pairs left
 		 * out, always in this order. Values are folded to lowercase letters,
@@ -567,9 +604,9 @@
 		/**
 		 * Every campaign this visitor has arrived from, oldest first, in one
 		 * string — for a single form field a report can filter on ("contains
-		 * light-the-path") or read as the visitor's path:
+		 * spring-appeal") or read as the visitor's path:
 		 *
-		 *   email__mailchimp__light-the-path__email-1 > social__instagram__light-the-path__post-3
+		 *   email__mailchimp__spring-appeal__email-1 > social__instagram__spring-appeal__post-3
 		 *
 		 * Each touch is packed by position (medium__source__campaign__content),
 		 * as form reports have always split it; only donation links use the
@@ -1281,6 +1318,7 @@
 				self.updateActiveTime();
 				if ( document.visibilityState === 'hidden' ) {
 					self.syncToServer();
+					self.postVisit();
 				}
 			} );
 
@@ -1307,6 +1345,7 @@
 			window.addEventListener( 'pagehide', function () {
 				self.recordPageView();
 				self.syncToServer();
+				self.postVisit();
 			} );
 
 			/*

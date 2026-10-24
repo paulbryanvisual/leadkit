@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.7.0
+
+Every visit kept in Cloudflare D1; only warm or known browsers come to
+monday.com.
+
+- **Visits Worker URL** (Settings → LeadKit, empty by default). With it set,
+  the tracker posts the browser's story straight to that Cloudflare Worker
+  each time a page is hidden or left, for every browser, not only after a
+  Donate click or a form. WordPress and its database never see that
+  traffic. Sent as text/plain, so there is no CORS preflight: one request
+  per post. A URL that is not https://, or has a ? or #, is refused with a
+  notice and the one saved before is kept, so a typo cannot turn it off.
+- **The Worker** (deployed per client in the client's Cloudflare account) keeps one row per browser
+  in D1 and decides which are warm: came back (2 visits by default),
+  arrived on a campaign link, clicked Donate, sent a form, or marked known.
+  It forgets cold browsers after 13 months unseen. Those rules are its
+  settings, not WordPress's.
+- **Warm browsers come to monday.com.** Every 15 minutes
+  (`leadkit_send_warm`, on `leadkit_quarter_hour`) LeadKit fetches up to 25
+  warm browsers whose story changed (`GET /warm`) and writes each with the
+  same writer a Donate click uses, so the Visitors row and every Visits row
+  arrive at once, earlier anonymous visits included. Then it reports them
+  sent by hash (`POST /sent`), so a story that changed meanwhile stays
+  pending. One monday.com refused is not reported and is tried again next
+  run. The batch size is the `leadkit/browsers_per_run` filter.
+- **A new Visitors row is marked known** in the Worker (`POST /known`, fire
+  and forget), so that browser stays warm from then on.
+- **The secret** for the Worker's private routes: `LEADKIT_VISITS_SECRET` in
+  wp-config.php, or the write-only **Visits Worker secret** setting. The
+  monday.com token never leaves WordPress.
+- The settings screen shows the Worker's counts: browsers kept, warm, sent
+  and waiting (cached five minutes). It waits three seconds at most for
+  them and remembers a failure for a minute, so a Worker that is down does
+  not slow the screen down; saving the settings asks again.
+- `scripts/check-browsers.php` checks the WordPress side against a fake
+  Worker.
+- **Generic out of the box.** No client's name or address in the plugin's
+  own text: help-text examples are example.org, and the notes here name no
+  site. Every difference between sites is in Settings → LeadKit. The first
+  activation no longer copies settings from one client's old theme; a new
+  site starts from the defaults. By Paul Bryan, PrettyGrand.com (the plugin
+  header and the update details).
+
+Needs a real cron on cached hosts, as the gift linker does (SiteGround:
+wp-cron.php every 15 minutes).
+
 ## 1.6.0
 
 The connections monday.com cannot make by itself, made by LeadKit.
@@ -35,13 +81,13 @@ The connections monday.com cannot make by itself, made by LeadKit.
   the page before packing the session into the form.
 - Visit rows are written after the browser's person is connected, so they
   can carry the person's link.
-- On the 3SGF sandbox: Donations' Person column was a one-way connection, so
+- On a sandbox: Donations' Person column was a one-way connection, so
   People's Total given never counted a gift whose Person was set by the
   automation or Zapier (only gifts linked from both sides by hand). It is now
   two-way; People's new "Donations" column fills itself and Total given sums
   it. The old one-way column is renamed "Donations (old – one-way)".
 
-How the work splits with the 3SGF Zap (Give Lively → Code → Create Item on
+How the work splits with a donations Zap (Give Lively → Code → Create Item on
 Donations → Find Items on People → Filter "not found" → Create Item on People
 → Update Item on Donations): the Zap creates a new donor and fills that
 gift's Person and Open person at once. For a returning donor the Filter stops
@@ -95,7 +141,7 @@ Where each visit came from, one row per visit.
   zone), Referrer, Source (the campaign link the visit arrived on, else the
   site that sent it, else blank), Landing page, Pages, Seconds on site,
   Donate clicks, Forms and the Journey. Named "Oct 14, 2026 9:58am · Email ·
-  light-the-path · email-1". Written with the Visitors row, earlier visits
+  spring-appeal · email-1". Written with the Visitors row, earlier visits
   from the browser's story included: up to 40 a write, 20 to a request,
   newest first, the rest on the next post. A visit this site has no row for
   is looked up by visitid first, so lost local state cannot double a row; a
@@ -107,21 +153,21 @@ Where each visit came from, one row per visit.
   longer call Gmail an organic search.
 - `leadkit_monday()` can return what succeeded in a request where part
   failed (`$partial`), for batches of aliased mutations.
-- On the 3SGF sandbox: DEMO – Visits (18435475074) was created with these
-  columns; its connection made "link to DEMO – Visits" on Visitors, renamed
+- On a sandbox: a Visits board was created with these
+  columns; its connection made a "link to …" column on Visitors, renamed
   "Visit rows" — not "Visits", which is already the count column there, and
   columns are found by title.
 
 ## 1.4.0
 
 Every Give Lively gift can now be joined to the visits and forms before it.
-Built for the 3Strands "Light the Path" plan: a gift arrives on a monday.com
+Built for a nonprofit's giving plan: a gift arrives on a monday.com
 Donations board through Zapier, and its packed source carries the same visitor
 id the forms send.
 
 - **Labeled packed source on donation links.** `utm_source` is now key.value
   pairs with the visitor id, in a fixed order, empty pairs left out:
-  `medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>`.
+  `medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>`.
   Values fold to lowercase letters, numbers and single dashes (`google.com`
   becomes `google-com`), so neither separator can appear inside one. Every
   stamp carries the visitor id, including direct visitors
@@ -165,8 +211,8 @@ id the forms send.
 - **Untracked pages** (Settings → LeadKit). Path prefixes, e.g. `/help/`,
   where the tracker is not loaded at all — nothing recorded, nothing posted.
   Anything a browser recorded there before is purged from its storage and
-  dropped by the server. `leadkit/track_page` filters it per request. On
-  3sgf.org the tracker was loading on Get Help (/help/) until this is set.
+  dropped by the server. `leadkit/track_page` filters it per request. Until
+  it is set, the tracker loads on every page, help pages included.
 - The endpoint is public, as it must be: it only writes the row of the id it
   is given, refuses bodies over 64 KB, and brakes per IP (30 posts per ten
   minutes, five new rows an hour). The monday.com token never leaves
@@ -260,8 +306,8 @@ Tried and rejected:
 
 ## 1.3.0
 
-Campaign tracking that survives the trip to a donation form. Built for the
-3Strands "Light the Path" appeal, where the question is which email or post a
+Campaign tracking that survives the trip to a donation form. Built for a
+nonprofit's year-end appeal, where the question is which email or post a
 gift came from, and the gift happens on Give Lively — which keeps one tracking
 field, `utm_source`, and drops the rest.
 
@@ -280,7 +326,7 @@ field, `utm_source`, and drops the rest.
 - **Donation links carry the campaign.** Every link to a donation host
   (`givelively.org` by default; Settings → LeadKit → Donation hosts) gets the
   campaign packed into `utm_source` as `medium__source__campaign__content`,
-  e.g. `email__mailchimp__light-the-path__email-1`. Rewritten on load, on
+  e.g. `email__mailchimp__spring-appeal__email-1`. Rewritten on load, on
   links added later, and again at the moment of the click. Give Lively widgets
   (`data-widget-src`) and donation iframes are covered too. With no campaign
   the source still says something: `organic__google.com`, `referral__<host>`

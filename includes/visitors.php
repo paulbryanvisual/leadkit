@@ -381,6 +381,9 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		update_option( $key, $st, false );
 		return '';
 	}
+	if ( $row !== (string) $st['row'] ) {
+		leadkit_visits_mark_known( $visitor ); // New on the board: warm in D1 from now on.
+	}
 	$st['row']  = $row;
 	$st['hash'] = $hash;
 
@@ -679,7 +682,7 @@ function leadkit_visitor_visits( $views ) {
 /**
  * The Journey log: one line per visit, newest first, in the visitor's time.
  *
- *   Oct 14, 2026 9:58pm — Email · light-the-path · email-1 — 3 pages, 2m 5s:
+ *   Oct 14, 2026 9:58pm — Email · spring-appeal · email-1 — 3 pages, 2m 5s:
  *   /hope/ 45s 80% > /donate/ 12s 30% > Donate click
  *
  * Each visit says where it came from — the campaign link it arrived on, or
@@ -851,7 +854,7 @@ function leadkit_visit_key( $visitor, $first_id ) {
 }
 
 /**
- * "Oct 14, 2026 9:58am · Email · light-the-path · email-1", or "· Direct".
+ * "Oct 14, 2026 9:58am · Email · spring-appeal · email-1", or "· Direct".
  *
  * @param array $d From leadkit_visit_details().
  * @return string

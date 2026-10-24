@@ -1,5 +1,7 @@
 # LeadKit — Lead Form & Visitor Tracking
 
+By Paul Bryan, [PrettyGrand.com](https://prettygrand.com/).
+
 The lead-capture form and first-party visitor tracker, packaged to travel
 between projects. `readme.txt` is the WordPress-facing version of this and
 carries the full payload contract; this is the short version.
@@ -18,11 +20,15 @@ design rather than importing its own.
 context to each lead — including every campaign (UTM) touch. The latest
 campaign is stamped onto donation links with the visitor id, packed into
 `utm_source` as labeled pairs —
-`medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>` —
+`medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>` —
 because Give Lively keeps only that field. With a monday.com Visitors board
 set, each Donate click and form submission keeps that visitor's row current,
 so a gift can be joined to the visits before it — and with a Visits board,
-each visit gets a row of its own with the site that sent it. Pages listed as untracked
+each visit gets a row of its own with the site that sent it. With a **Visits
+Worker** set, every browser's visits go to a Cloudflare Worker that keeps
+them in D1, and the ones that turn warm (come back, arrive on a campaign
+link, click Donate or send a form) come to those boards with their whole
+history. Pages listed as untracked
 (a Get Help page) get no tracker at all.
 
 ## The server side is not in here
@@ -51,18 +57,12 @@ site updates it from the WordPress admin like any other plugin.
 Never edit the copy inside a site's `wp-content` — that is exactly how the
 sibling block-labeler plugin drifted into two incompatible forks.
 
-## Settings migration
-
-On first activation the plugin adopts the theme-era options it replaced
-(`roger_form_endpoint`, `roger_turnstile_sitekey`, and the
-`ROGER_TURNSTILE_SITEKEY` constant) so moving the form out of a theme does not
-mean re-typing its settings. Harmless anywhere those never existed.
-
 ## Checks
 
 ```bash
 php scripts/check-packing.php
 php scripts/check-visitors.php
+php scripts/check-browsers.php
 NODE_PATH=/path/to/node_modules node scripts/check-tracker.js   # needs jsdom
 ```
 

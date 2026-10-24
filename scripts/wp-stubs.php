@@ -23,10 +23,12 @@ $GLOBALS['lk_transients'] = array();
 $GLOBALS['lk_filters']    = array();
 $GLOBALS['lk_actions']    = array();
 $GLOBALS['lk_settings']   = array();
+$GLOBALS['lk_notices']    = array();
 
 function lk_reset() {
 	$GLOBALS['lk_options']    = array();
 	$GLOBALS['lk_transients'] = array();
+	$GLOBALS['lk_notices']    = array();
 	// Back to the hooks the plugin registered when it loaded; drop the rest.
 	$GLOBALS['lk_filters']    = $GLOBALS['lk_boot_filters'] ?? array();
 	$GLOBALS['lk_actions']    = $GLOBALS['lk_boot_actions'] ?? array();
@@ -67,6 +69,9 @@ function register_deactivation_hook() {}
 function register_rest_route() {}
 function register_setting( $group, $name, $args ) {
 	$GLOBALS['lk_settings'][ $name ] = $args;
+}
+function add_settings_error( $setting, $code, $message, $type = 'error' ) {
+	$GLOBALS['lk_notices'][] = $code;
 }
 function plugin_dir_url( $f ) {
 	return 'https://example.test/wp-content/plugins/leadkit/';

@@ -60,7 +60,7 @@ function leadkit_secs_label( $secs ) {
 }
 
 /**
- * "Email · light-the-path · email-1" from the UTM fields, or where they came from.
+ * "Email · spring-appeal · email-1" from the UTM fields, or where they came from.
  *
  * @param array $t Tracking values.
  * @return string
@@ -101,7 +101,7 @@ function leadkit_source_label( $t ) {
 }
 
 /**
- * A packed campaign as words — by position ("email__mailchimp__light-the-path__email-1")
+ * A packed campaign as words — by position ("email__mailchimp__spring-appeal__email-1")
  * or labeled ("medium.email__source.mailchimp__…", as donation links carry it).
  *
  * @param string $packed Packed touch.

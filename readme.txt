@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.7.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -27,7 +27,7 @@ Two pieces, one plugin:
   clicks, rage clicks, campaign (UTM) touches. Nothing is sent for anonymous
   visitors. The latest campaign is stamped onto donation links (Give Lively by
   default) with the visitor id, packed into utm_source as labeled pairs:
-  medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+  medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
   Give Lively's embedded widgets (Branded and Simple) get it too.
   The session attaches to the lead at the moment one identifies themself: it is
   injected into the form as a hidden `analyticsData` field on submit, and the
@@ -67,6 +67,19 @@ on the next page load until a 2xx (or a 4xx other than 429):
     lead_forms, donation_returns: [ { time, path } ], timezone }
 Answers 200 once the row is written (or already said the same), 400/413 for
 a body it will never take, 429 when braked, 502 when monday.com failed.
+
+Visits Worker (`<Visits Worker URL>/visit`) — POST from every browser each
+time a page is hidden or left, when a Visits Worker URL is set (the tracker
+gets no URL otherwise). The same body as leadkit/v1/visitor, sent as
+text/plain (no CORS preflight) and not queued, since the next post carries
+everything. The Worker keeps it in Cloudflare D1. WordPress calls the
+Worker's private routes with `Authorization: Bearer <LEADKIT_VISITS_SECRET>`:
+  GET /warm?limit=25   { browsers: [ { visitor, hash, story } ] }, the warm
+                       browsers whose story changed
+  POST /sent           { sent: [ { visitor, hash } ] }, cleared only where
+                       the hash still matches
+  POST /known          { visitors: [ id ] }, a browser now on the Visitors board
+  GET /stats           { browsers, warm, pending, sent }
 
 The packed source on donation links: key.value pairs in this order, "__"
 between pairs (or "-" with the leadkit/packed_pair_separator filter), empty
@@ -113,11 +126,18 @@ campaign credited when the visitor came back from the donation host).
 * Storage prefix for the localStorage keys, in case two projects share a
   domain during development.
 
-On first activation the plugin seeds its settings from the legacy
-`roger_form_endpoint` / `roger_turnstile_sitekey` options when they exist, so
-moving an existing site onto the plugin needs no re-typing.
-
 == Changelog ==
+
+= 1.7.0 =
+* Visits Worker: every browser's visits go straight to a Cloudflare Worker
+  that keeps them in D1, anonymous ones included; nothing touches
+  WordPress. Every 15 minutes LeadKit fetches the browsers that turned warm
+  (came back, arrived on a campaign link, clicked Donate or sent a form) and
+  writes them to the Visitors and Visits boards with their whole history.
+  Off until a Worker URL is set.
+* Generic out of the box: no client's name or address in the plugin's text;
+  every difference between sites is a setting. First activation no longer
+  copies settings from an old theme. By Paul Bryan, PrettyGrand.com.
 
 = 1.6.0 =
 * Gift linker: finds or creates donors on People (after giving Zapier 10
@@ -137,7 +157,7 @@ moving an existing site onto the plugin needs no re-typing.
 
 = 1.4.0 =
 * Donation links carry labeled pairs with the visitor id:
-  medium.email__source.mailchimp__campaign.light-the-path__content.email-1__visitorid.<id>
+  medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.<id>
   Give Lively's Branded and Simple widgets get the same.
 * monday.com Visitors board: one row per browser, updated on every Donate click
   and form submission, connected to the submission and the person.
@@ -196,5 +216,5 @@ moving an existing site onto the plugin needs no re-typing.
 * Fix: photographs viewed by advancing through a lightbox were not counted.
 
 = 1.0.0 =
-* First extraction from the Roger England theme: form renderer, Turnstile
+* First extraction from a client theme: form renderer, Turnstile
   lazy-mount, AnalyticsTracker port, settings screen.

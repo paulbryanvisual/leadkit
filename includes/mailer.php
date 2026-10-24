@@ -4,7 +4,7 @@
  *
  * The default path is PHP `mail()`, which on shared hosting means an
  * unauthenticated message from a shared IP, claiming to come from a domain the
- * host has no authority over. This site is the worst case of that: no MX, no
+ * host has no authority over. The worst case, and not a rare one: no MX, no
  * SPF, no DKIM, no DMARC on the domain at all. Gmail's options are the spam
  * folder or a silent drop, and it picks one without telling anybody.
  *

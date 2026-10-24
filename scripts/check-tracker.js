@@ -425,6 +425,21 @@ function query( url ) {
 	eq( [ syncBody.lead_at, syncBody.first_referrer, ( syncBody.referrers || [] ).length, ( syncBody.lead_forms || [] ).length ], [ '2026-10-01T15:00:00.000Z', 'google.com', 1, 1 ], 'sync: lead fields plus the story the Visitors board needs' );
 	ok( ( syncBody.page_views || [] ).some( ( v ) => v.path === '/events/' ), 'sync: including the page being left', syncBody.page_views );
 
+	// ---- every visit, anonymous ones included (a Visits Worker set) --------------------
+	const VISITS = 'https://v.3sgf.org/visit';
+	p = boot( { url: 'https://3sgf.org/about/', cfg: { visitsUrl: VISITS }, storage: { leadkit_analytics_session: session() } } );
+	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
+	Object.defineProperty( p.w.document, 'visibilityState', { value: 'hidden', configurable: true } );
+	p.w.document.dispatchEvent( new p.w.Event( 'visibilitychange' ) );
+	const visitPosts = p.calls.filter( ( c ) => c.url === VISITS );
+	eq( visitPosts.length, 1, 'visit: an anonymous browser posts on leaving, once for hidden + pagehide' );
+	eq( ( visitPosts[ 0 ] || {} ).body && [ visitPosts[ 0 ].body.visitor_id, visitPosts[ 0 ].body.page_views.map( ( v ) => v.path ) ], [ '8f3k2q9a', [ '/about/' ] ], 'visit: the story, with the page being left' );
+	eq( p.calls.filter( ( c ) => c.url.indexOf( '/sync' ) !== -1 ).length, 0, 'visit: not a lead, so no sync' );
+
+	p = boot( { url: 'https://3sgf.org/about/', storage: { leadkit_analytics_session: session() } } );
+	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
+	eq( p.calls.length, 0, 'visit: setting off (no visitsUrl), nothing posted' );
+
 	console.log( ( failed ? 'FAILED' : 'ok' ) + ' — ' + passed + ' passed, ' + failed + ' failed' );
 	process.exit( failed ? 1 : 0 );
 } )().catch( ( e ) => {
