@@ -44,6 +44,32 @@ function leadkit_keep_secret( $submitted, $key ) {
 	return '' === $submitted ? $existing : $submitted;
 }
 
+/**
+ * Resolve the Visits Worker URL on save: https, with no query or fragment.
+ *
+ * Anything else is refused with a notice and the URL saved before is kept,
+ * so a typo cannot quietly stop every visit being kept. An empty box turns
+ * it off.
+ *
+ * @param string $submitted What the form sent.
+ * @return string
+ */
+function leadkit_clean_visits_url( $submitted ) {
+	$url = trim( (string) $submitted );
+	if ( '' === $url ) {
+		return '';
+	}
+	if ( preg_match( '#^https://[^/\s"\'<>?\#][^\s"\'<>?\#]*$#', $url ) ) {
+		return esc_url_raw( $url, array( 'https' ) );
+	}
+	add_settings_error(
+		'leadkit_options',
+		'leadkit_visits_url',
+		__( 'Visits Worker URL not saved: it must start with https:// and have no ? or #, e.g. https://v.3sgf.org. The URL it had is kept; the other settings were saved.', 'leadkit' )
+	);
+	return (string) ( get_option( 'leadkit_options', array() )['visits_url'] ?? '' );
+}
+
 
 /**
  * Sanitise a comma-separated list of recipients.
@@ -105,7 +131,7 @@ add_action(
 						'monday_visitors_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_visitors_board'] ?? '' ), $vb ) ? $vb[0] : '',
 						'monday_visits_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_visits_board'] ?? '' ), $vs ) ? $vs[0] : '',
 						'monday_donations_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_donations_board'] ?? '' ), $db ) ? $db[0] : '',
-						'visits_url'        => preg_match( '#^https://[^\s"\'<>]+$#', trim( (string) ( $raw['visits_url'] ?? '' ) ) ) ? esc_url_raw( trim( (string) $raw['visits_url'] ), array( 'https' ) ) : '',
+						'visits_url'        => leadkit_clean_visits_url( $raw['visits_url'] ?? '' ),
 						'visits_secret'     => leadkit_keep_secret( $raw['visits_secret'] ?? '', 'visits_secret' ),
 						// Paths, each with slashes both ends: "/help/". A lone "/" is everything.
 						'untracked_paths'   => implode( ', ', array_unique( array_filter( array_map( function ( $p ) {

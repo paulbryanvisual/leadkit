@@ -10,7 +10,8 @@ monday.com.
   each time a page is hidden or left, for every browser, not only after a
   Donate click or a form. WordPress and its database never see that
   traffic. Sent as text/plain, so there is no CORS preflight: one request
-  per post.
+  per post. A URL that is not https://, or has a ? or #, is refused with a
+  notice and the one saved before is kept, so a typo cannot turn it off.
 - **The Worker** (deployed per client in the client's Cloudflare account) keeps one row per browser
   in D1 and decides which are warm: came back (2 visits by default),
   arrived on a campaign link, clicked Donate, sent a form, or marked known.
@@ -30,7 +31,9 @@ monday.com.
   wp-config.php, or the write-only **Visits Worker secret** setting. The
   monday.com token never leaves WordPress.
 - The settings screen shows the Worker's counts: browsers kept, warm, sent
-  and waiting (cached five minutes).
+  and waiting (cached five minutes). It waits three seconds at most for
+  them and remembers a failure for a minute, so a Worker that is down does
+  not slow the screen down; saving the settings asks again.
 - `scripts/check-browsers.php` checks the WordPress side against a fake
   Worker.
 

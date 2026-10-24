@@ -29,6 +29,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const LEADKIT_BROWSERS_HOOK    = 'leadkit_send_warm';
 const LEADKIT_BROWSERS_PER_RUN = 25;
+const LEADKIT_BROWSERS_STATS   = 'leadkit_visits_stats';
 
 add_action(
 	'init',
@@ -43,6 +44,14 @@ add_action(
 	}
 );
 add_action( LEADKIT_BROWSERS_HOOK, 'leadkit_send_warm_browsers' );
+
+// Settings saved (a new URL or secret, say): the counts are asked for again.
+add_action(
+	'update_option_leadkit_options',
+	function () {
+		delete_transient( LEADKIT_BROWSERS_STATS );
+	}
+);
 
 /**
  * The Worker's base URL, without a trailing slash, or ''.
@@ -89,13 +98,14 @@ function leadkit_visits_post_url() {
 /**
  * Call one of the Worker's private routes.
  *
- * @param string     $method GET or POST.
- * @param string     $path   e.g. '/warm?limit=25'.
- * @param array|null $body   JSON body for POST.
- * @param bool       $wait   False: send and do not wait for the answer.
+ * @param string     $method  GET or POST.
+ * @param string     $path    e.g. '/warm?limit=25'.
+ * @param array|null $body    JSON body for POST.
+ * @param bool       $wait    False: send and do not wait for the answer.
+ * @param int        $timeout Seconds to wait for the answer.
  * @return array|null Decoded answer; null on any failure (or when not waiting).
  */
-function leadkit_visits_call( $method, $path, $body = null, $wait = true ) {
+function leadkit_visits_call( $method, $path, $body = null, $wait = true, $timeout = 15 ) {
 	$base   = leadkit_visits_worker();
 	$secret = leadkit_visits_secret();
 	if ( ! $base || ! $secret ) {
@@ -103,7 +113,7 @@ function leadkit_visits_call( $method, $path, $body = null, $wait = true ) {
 	}
 	$args = array(
 		'method'   => $method,
-		'timeout'  => $wait ? 15 : 1,
+		'timeout'  => $wait ? $timeout : 1,
 		'blocking' => $wait,
 		'headers'  => array(
 			'Authorization' => 'Bearer ' . $secret,
@@ -183,22 +193,29 @@ function leadkit_visits_mark_known( $visitor ) {
 /**
  * Counts for the settings screen, cached five minutes.
  *
+ * The screen waits for them, so the Worker gets three seconds, not fifteen,
+ * and a failure is remembered for a minute: a Worker that is down or refuses
+ * the secret costs one short wait a minute, not one on every page load.
+ *
  * @return array|null browsers, warm, pending, sent.
  */
 function leadkit_browsers_counts() {
-	$key    = 'leadkit_visits_stats';
-	$cached = get_transient( $key );
+	$cached = get_transient( LEADKIT_BROWSERS_STATS );
 	if ( is_array( $cached ) ) {
 		return $cached;
 	}
-	$data = leadkit_visits_call( 'GET', '/stats' );
+	if ( false !== $cached ) {
+		return null; // It failed a moment ago.
+	}
+	$data = leadkit_visits_call( 'GET', '/stats', null, true, 3 );
 	if ( ! $data ) {
+		set_transient( LEADKIT_BROWSERS_STATS, 'failed', MINUTE_IN_SECONDS );
 		return null;
 	}
 	$out = array();
 	foreach ( array( 'browsers', 'warm', 'pending', 'sent' ) as $k ) {
 		$out[ $k ] = (int) ( $data[ $k ] ?? 0 );
 	}
-	set_transient( $key, $out, 5 * MINUTE_IN_SECONDS );
+	set_transient( LEADKIT_BROWSERS_STATS, $out, 5 * MINUTE_IN_SECONDS );
 	return $out;
 }

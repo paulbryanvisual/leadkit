@@ -10,7 +10,8 @@
  * visits; /sent reported with each browser's hash; a monday.com failure
  * left pending; a Worker that is down or refuses the secret; untracked
  * pages in a stored story still kept out; a new Visitors row marked known;
- * the tracker getting the Worker's URL; and the settings counts.
+ * the tracker getting the Worker's URL; the settings counts, quick to give
+ * up on a Worker that is down; and the Worker URL as saved.
  *
  *   php scripts/check-browsers.php
  *
@@ -56,7 +57,7 @@ class LkWorker {
 	public static function answer( $url, $args ) {
 		$path = substr( $url, strlen( WORKER ) );
 		$body = isset( $args['body'] ) ? json_decode( $args['body'], true ) : null;
-		self::$calls[] = array( 'method' => $args['method'], 'path' => $path, 'body' => $body, 'blocking' => $args['blocking'] ?? true );
+		self::$calls[] = array( 'method' => $args['method'], 'path' => $path, 'body' => $body, 'blocking' => $args['blocking'] ?? true, 'timeout' => $args['timeout'] ?? null );
 		if ( self::$down ) {
 			return new WP_Error( 'http', 'down' );
 		}
@@ -276,8 +277,47 @@ lk_eq( count( lk_vrows() ), 0, 'and nothing is written for it' );
 lk_setup();
 LkWorker::put( $A, lk_story( array( lk_view( 'p1', '/', $t0 ) ) ) );
 lk_eq( leadkit_browsers_counts(), array( 'browsers' => 1, 'warm' => 1, 'pending' => 0, 'sent' => 1 ), 'counts from /stats' );
+lk_eq( array_column( LkWorker::$calls, 'timeout' ), array( 3 ), 'counts: the settings screen waits 3 seconds at most' );
 LkWorker::$calls = array();
 leadkit_browsers_counts();
 lk_eq( LkWorker::$calls, array(), 'counts: cached' );
+do_action( 'update_option_leadkit_options' );
+leadkit_browsers_counts();
+lk_eq( lk_worker_paths(), array( 'GET /stats' ), 'counts: asked for again once the settings are saved' );
+
+// A Worker that is down: asked once, then left alone for a minute.
+lk_setup();
+LkWorker::$down = true;
+lk_eq( leadkit_browsers_counts(), null, 'counts: Worker down, none shown' );
+lk_eq( leadkit_browsers_counts(), null, 'counts: Worker down, still none a moment later' );
+lk_eq( lk_worker_paths(), array( 'GET /stats' ), 'counts: a failure is remembered, not asked again on every page load' );
+$left = ( $GLOBALS['lk_transients'][ LEADKIT_BROWSERS_STATS ][1] ?? 0 ) - time();
+lk_ok( $left > 0 && $left <= MINUTE_IN_SECONDS, 'counts: a failure is remembered for a minute, not five', $left );
+$GLOBALS['lk_transients'][ LEADKIT_BROWSERS_STATS ][1] = time() - 1; // A minute later.
+LkWorker::$down = false;
+lk_eq( leadkit_browsers_counts()['browsers'] ?? null, 0, 'counts: the Worker back, asked again' );
+
+// ---- 5. the Worker URL as saved -------------------------------------------------------------
+do_action( 'admin_init' );
+$save = $GLOBALS['lk_settings']['leadkit_options']['sanitize_callback'];
+
+foreach ( array( WORKER, WORKER . '/visit/', '  ' . WORKER . "/visit \n", 'https://lk-visits.acct.workers.dev' ) as $u ) {
+	lk_setup( array( 'visits_url' => '' ) );
+	lk_eq( $save( array( 'visits_url' => $u ) )['visits_url'], trim( $u ), 'Worker URL saved: ' . json_encode( $u ) );
+	lk_eq( $GLOBALS['lk_notices'], array(), 'and no notice: ' . json_encode( $u ) );
+}
+
+// A typo is refused with a notice; the URL it had is kept, so visits go on being kept.
+foreach ( array( 'http://v.3sgf.org', 'v.3sgf.org', 'HTTPS://v.3sgf.org', 'https:///', WORKER . '/visit?x=1', WORKER . '#x', WORKER . '"><script>', 'javascript:alert(1)' ) as $u ) {
+	lk_setup();
+	lk_eq( $save( array( 'visits_url' => $u ) )['visits_url'], WORKER, 'a bad Worker URL keeps the one saved: ' . $u );
+	lk_eq( $GLOBALS['lk_notices'], array( 'leadkit_visits_url' ), 'and says so: ' . $u );
+}
+lk_setup( array( 'visits_url' => '' ) );
+lk_eq( $save( array( 'visits_url' => 'http://v.3sgf.org' ) )['visits_url'], '', 'a bad Worker URL with none saved: still none' );
+
+lk_setup();
+lk_eq( $save( array( 'visits_url' => '' ) )['visits_url'], '', 'an emptied Worker URL turns it off' );
+lk_eq( $GLOBALS['lk_notices'], array(), 'without a notice' );
 
 lk_done();
