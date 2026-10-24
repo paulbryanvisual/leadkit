@@ -63,6 +63,7 @@ sibling block-labeler plugin drifted into two incompatible forks.
 php scripts/check-packing.php
 php scripts/check-visitors.php
 php scripts/check-browsers.php
+php scripts/check-updater.php
 NODE_PATH=/path/to/node_modules node scripts/check-tracker.js   # needs jsdom
 ```
 

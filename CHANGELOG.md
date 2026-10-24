@@ -1,12 +1,22 @@
 # Changelog
 
-## Unreleased
+## 1.7.1
 
+"Check again" finds a new LeadKit at once, and the help text says visits stay
+in D1 until a goal.
+
+- **Check again** under Dashboard → Updates (the network's too) asks GitHub
+  afresh instead of the twelve-hour cache, so a new release shows at once,
+  also when WordPress checked less than a minute before. Only for users who
+  can update plugins. Until now the cache was cleared only after an update,
+  so a new release could take up to twelve hours to appear.
 - Visits stay in Cloudflare D1 until a browser reaches a goal: the help text
   and readme now describe the Visits Worker's `WARM_RULES` setting (by default
   donate, form and known; returning and campaign can be added) instead of
   listing returning visitors and campaign arrivals as warm. A browser
   WordPress has written stays warm, so its new visits keep coming.
+- `scripts/check-updater.php` checks the update offer and Check again against
+  a fake GitHub.
 
 ## 1.7.0
 

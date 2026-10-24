@@ -111,8 +111,8 @@ function leadkit_github_headers( $accept = 'application/vnd.github+json' ) {
  *
  * Cached for twelve hours because this runs on admin page loads, and an
  * unauthenticated GitHub is 60 requests an hour per IP — shared hosting means
- * sharing that with strangers. The cache is cleared when someone explicitly
- * checks for updates.
+ * sharing that with strangers. The cache is cleared when someone clicks
+ * "Check again" under Dashboard → Updates, and after any update.
  *
  * @param bool $force Skip the cache.
  * @return array{version:string,zip:string,url:string,notes:string,published:string}|null
@@ -354,10 +354,33 @@ add_filter(
 	4
 );
 
-/** A fresh check when someone explicitly asks for one. */
+/** After any update, a fresh check: the version just installed changes the answer. */
 add_action(
 	'upgrader_process_complete',
 	function () {
 		delete_site_transient( 'leadkit_latest_release' );
 	}
+);
+
+/*
+ * "Check again" (update-core.php?force-check=1, the network's too): GitHub is
+ * asked afresh, not the twelve-hour cache. Before WordPress's own plugin
+ * check (priority 10), which then reads the fresh answer; and the answer is
+ * written into the update list here too, because WordPress re-checks plugins
+ * on that page at most once a minute, so a second click inside the minute
+ * would otherwise still show the old one.
+ */
+add_action(
+	'load-update-core.php',
+	function () {
+		if ( empty( $_GET['force-check'] ) || ! current_user_can( 'update_plugins' ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		delete_site_transient( 'leadkit_latest_release' );
+		$current = get_site_transient( 'update_plugins' );
+		if ( is_object( $current ) ) {
+			set_site_transient( 'update_plugins', $current ); // Runs the filter above with the fresh answer.
+		}
+	},
+	9
 );

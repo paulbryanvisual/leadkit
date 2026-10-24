@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.7.1
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -131,6 +131,12 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.7.1 =
+* "Check again" under Dashboard → Updates finds a new LeadKit release at
+  once, instead of up to twelve hours later.
+* Help text: visits stay in the Visits Worker until a browser reaches a goal;
+  the Worker's WARM_RULES setting decides which.
 
 = 1.7.0 =
 * Visits Worker: every browser's visits go straight to a Cloudflare Worker
