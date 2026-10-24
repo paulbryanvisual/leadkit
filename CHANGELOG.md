@@ -38,8 +38,10 @@ monday.com.
   Worker.
 - **Generic out of the box.** No client's name or address in the plugin's
   own text: help-text examples are example.org, and the notes here name no
-  site. Every difference between sites is in Settings → LeadKit. By Paul
-  Bryan, PrettyGrand.com (the plugin header and the update details).
+  site. Every difference between sites is in Settings → LeadKit. The first
+  activation no longer copies settings from one client's old theme; a new
+  site starts from the defaults. By Paul Bryan, PrettyGrand.com (the plugin
+  header and the update details).
 
 Needs a real cron on cached hosts, as the gift linker does (SiteGround:
 wp-cron.php every 15 minutes).

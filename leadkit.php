@@ -124,37 +124,6 @@ register_deactivation_hook(
 );
 
 /**
- * First activation on a site that already carried the theme-era options picks
- * them up, so "move the form into a plugin" does not mean re-typing settings.
- */
-register_activation_hook(
-	__FILE__,
-	function () {
-		if ( get_option( 'leadkit_options' ) ) {
-			return;
-		}
-
-		$seed = array();
-		foreach ( array(
-			'submit_url'        => 'roger_form_endpoint',
-			'turnstile_sitekey' => 'roger_turnstile_sitekey',
-		) as $ours => $theirs ) {
-			$val = get_option( $theirs, '' );
-			if ( $val ) {
-				$seed[ $ours ] = $val;
-			}
-		}
-		if ( defined( 'ROGER_TURNSTILE_SITEKEY' ) && ROGER_TURNSTILE_SITEKEY ) {
-			$seed['turnstile_sitekey'] = ROGER_TURNSTILE_SITEKEY;
-		}
-
-		if ( $seed ) {
-			update_option( 'leadkit_options', $seed );
-		}
-	}
-);
-
-/**
  * Pages that are never tracked (Settings → LeadKit → Untracked pages).
  *
  * @return string[] Path prefixes, each with a trailing slash.

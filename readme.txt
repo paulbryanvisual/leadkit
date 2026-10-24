@@ -126,10 +126,6 @@ campaign credited when the visitor came back from the donation host).
 * Storage prefix for the localStorage keys, in case two projects share a
   domain during development.
 
-On first activation the plugin seeds its settings from the legacy
-`roger_form_endpoint` / `roger_turnstile_sitekey` options when they exist, so
-moving an existing site onto the plugin needs no re-typing.
-
 == Changelog ==
 
 = 1.7.0 =
@@ -140,8 +136,8 @@ moving an existing site onto the plugin needs no re-typing.
   writes them to the Visitors and Visits boards with their whole history.
   Off until a Worker URL is set.
 * Generic out of the box: no client's name or address in the plugin's text;
-  every difference between sites is a setting. By Paul Bryan,
-  PrettyGrand.com.
+  every difference between sites is a setting. First activation no longer
+  copies settings from an old theme. By Paul Bryan, PrettyGrand.com.
 
 = 1.6.0 =
 * Gift linker: finds or creates donors on People (after giving Zapier 10
@@ -220,5 +216,5 @@ moving an existing site onto the plugin needs no re-typing.
 * Fix: photographs viewed by advancing through a lightbox were not counted.
 
 = 1.0.0 =
-* First extraction from the Roger England theme: form renderer, Turnstile
+* First extraction from a client theme: form renderer, Turnstile
   lazy-mount, AnalyticsTracker port, settings screen.

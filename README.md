@@ -57,13 +57,6 @@ site updates it from the WordPress admin like any other plugin.
 Never edit the copy inside a site's `wp-content` — that is exactly how the
 sibling block-labeler plugin drifted into two incompatible forks.
 
-## Settings migration
-
-On first activation the plugin adopts the theme-era options it replaced
-(`roger_form_endpoint`, `roger_turnstile_sitekey`, and the
-`ROGER_TURNSTILE_SITEKEY` constant) so moving the form out of a theme does not
-mean re-typing its settings. Harmless anywhere those never existed.
-
 ## Checks
 
 ```bash

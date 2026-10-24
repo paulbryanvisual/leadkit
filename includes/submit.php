@@ -196,9 +196,9 @@ function leadkit_notify( $post_id, $fields, $opts ) {
 	/*
 	 * From must be an address the SENDER is authorised to use — which is not
 	 * the same as "this site's domain", and assuming it was is how the first
-	 * version of this got it wrong. rogerenglandhomeremodeling.com has no SPF,
-	 * no DKIM and no DMARC, so `wordpress@` there is precisely the shape of a
-	 * forgery and Gmail treats it accordingly.
+	 * version of this got it wrong. The first site it ran on had no SPF, no
+	 * DKIM and no DMARC, so `wordpress@` there was precisely the shape of a
+	 * forgery and Gmail treated it accordingly.
 	 *
 	 * So it is configurable, and falls back to the site domain only because
 	 * something has to be there. Set it to an address on the domain verified
