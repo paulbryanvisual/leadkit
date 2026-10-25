@@ -553,6 +553,158 @@ lk_eq( count( lk_people_named( 'Careful Donor' ) ), 0, 'linker: lookup failed �
 leadkit_link_gifts();
 lk_eq( count( lk_people_named( 'Careful Donor' ) ), 1, 'linker: next run, created once' );
 
+// ---- 12b. A Zap that only creates the gift: LeadKit unpacks, connects and makes the donor ------
+/** The gift boards with what such a Zap fills, and People's details and groups. */
+function lk_gift_boards_full() {
+	lk_gift_boards();
+	LkMonday::$boards[ GIFTS ]['cols'] += array(
+		'text_src'   => array( 'Packed source (raw)', 'text' ),
+		'text_med'   => array( 'utm_medium', 'text' ),
+		'text_usrc'  => array( 'utm_source', 'text' ),
+		'text_camp'  => array( 'utm_campaign', 'text' ),
+		// No utm_content or utm_term column: those fields are not wanted.
+		'phone_dph'  => array( 'Donor phone', 'phone' ),
+		'text_dst'   => array( 'Donor street', 'text' ),
+		'text_dcity' => array( 'Donor city', 'text' ),
+		'text_dfax'  => array( 'Donor fax', 'text' ), // Nothing on People to copy it to.
+	);
+	LkMonday::$boards[ PEOPLE ]['cols'] += array(
+		'phone_pph'  => array( 'Phone', 'phone' ),
+		'text_pst'   => array( 'Street', 'text' ),
+		'text_pcity' => array( 'City', 'text' ),
+	);
+	LkMonday::$boards[ PEOPLE ]['groups'] = array( 'group_test' => 'TEST – email drafts (delete after testing)', 'group_new' => 'New donors (from Give Lively)' );
+}
+function lk_set( $opts ) {
+	update_option( 'leadkit_options', array_merge( get_option( 'leadkit_options' ), $opts ) );
+}
+function lk_email( $e ) {
+	return array( 'email_mm846aas' => array( 'email' => $e, 'text' => $e ) );
+}
+function lk_person_item( $name ) {
+	return LkMonday::$boards[ PEOPLE ]['items'][ lk_people_named( $name )[0] ?? '' ] ?? array();
+}
+function lk_cols_titled( $board, $title ) {
+	return array_keys( array_filter( LkMonday::$boards[ $board ]['cols'], fn( $c ) => 0 === strcasecmp( $c[0], $title ) ) );
+}
+/** Lookups of Visitors rows by visitorid. */
+function lk_row_finds() {
+	return array_values( array_filter( LkMonday::$calls, fn( $c ) => VB === ( $c['v']['b'] ?? '' ) && false !== strpos( $c['q'], 'items_page_by_column_values' ) ) );
+}
+
+lk_gift_boards_full();
+lk_set( array( 'people_group' => 'New donors (from Give Lively)' ) );
+$grace = lk_person( 'Grace Liu', 'grace@example.org' );
+lk_request( lk_post() ); // $V's browser: a Visitors row, with no person yet.
+$vrow    = array_key_first( lk_rows() );
+$g_pack  = lk_gift(
+	'Pat Rivera',
+	lk_email( 'pat@example.org' ) + array(
+		'text_src'   => 'medium.email__source.mailchimp__campaign.spring-appeal__content.email-1__visitorid.' . $V,
+		'text_camp'  => 'typed-by-hand',
+		'phone_dph'  => array( 'phone' => '+12025550169', 'countryShortName' => 'US' ),
+		'text_dst'   => '12 Oak St',
+		'text_dcity' => 'Dallas',
+		'text_dfax'  => '555-0100',
+	)
+);
+$g_plain = lk_gift( 'Sam Okafor', lk_email( 'sam@example.org' ) + array( 'text_src' => 'facebook', 'phone_dph' => array( 'phone' => '2025550123' ) ) );
+$g_later = lk_gift( 'Grace Liu', lk_email( 'grace@example.org' ) + array( 'text_src' => 'visitorid.d2d2d2d2-later' ) );
+LkMonday::$calls = array();
+$run = leadkit_link_gifts();
+$pat = lk_item( GIFTS, $g_pack );
+lk_eq( array( $pat['text_med'] ?? null, $pat['text_usrc'] ?? null, $pat['text_mm84wm8e'] ?? null ), array( 'email', 'mailchimp', $V ), 'unpack: the packed source fills the empty utm and visitorid columns' );
+lk_eq( $pat['text_camp'] ?? null, 'typed-by-hand', 'unpack: a column already filled is left as it is' );
+lk_eq( array( lk_cols_titled( GIFTS, 'utm_content' ), lk_cols_titled( GIFTS, 'utm_term' ) ), array( array(), array() ), 'unpack: a field with no column is left out — no column is made for it' );
+lk_eq( lk_item( GIFTS, $g_later )['text_mm84wm8e'] ?? null, 'd2d2d2d2-later', 'unpack: a source that is only a visitorid fills visitorid' );
+$sam = lk_item( GIFTS, $g_plain );
+lk_eq( array( isset( $sam['text_med'] ), isset( $sam['text_usrc'] ), isset( $sam['text_mm84wm8e'] ) ), array( false, false, false ), 'unpack: a source that is not packed is left alone' );
+lk_eq( $run['unpacked'] ?? null, 2, 'unpack: two gifts unpacked' );
+lk_eq( $pat['board_relation_mm84k7qr'] ?? null, array( 'item_ids' => array( (int) $vrow ) ), 'visitor: the gift is connected to its Visitors row by visitorid' );
+lk_eq( lk_item( VB, $vrow )['board_relation_mm84ysfv']['item_ids'][0] ?? null, (int) ( lk_people_named( 'Pat Rivera' )[0] ?? -1 ), 'visitor: and in the same run that browser gets the donor' );
+lk_eq( count( lk_row_finds() ), 1, 'visitor: the rows of every gift waiting for one found in one request' );
+$p = lk_person_item( 'Pat Rivera' );
+lk_eq( $p['group'] ?? null, 'group_new', 'new donor: made in the group set by its title, not the top group' );
+lk_eq( array( $p['values']['phone_pph'] ?? null, $p['values']['text_pst'] ?? null, $p['values']['text_pcity'] ?? null ), array( array( 'phone' => '+12025550169', 'countryShortName' => 'US' ), '12 Oak St', 'Dallas' ), 'new donor: Donor phone, street and city copied to Phone, Street and City' );
+lk_eq( array_keys( $p['values'] ?? array() ), array( 'email_mm83fpfp', 'phone_pph', 'text_pst', 'text_pcity' ), 'new donor: and nothing else — Donor fax has no column to go to' );
+$s = lk_person_item( 'Sam Okafor' );
+lk_eq( array( isset( $s['values']['phone_pph'] ), $s['values']['email_mm83fpfp']['email'] ?? null ), array( false, 'sam@example.org' ), 'new donor: a phone with no country is not copied, and does not stop the person being made' );
+$done = get_option( 'leadkit_gifts_done' );
+lk_eq( array( isset( $done[ $g_pack ] ), isset( $done[ $g_later ] ) ), array( true, false ), 'visitor: a gift whose Visitors row is not written yet keeps waiting' );
+
+// The browser turns warm later: its row is written, and the next run connects the gift.
+lk_request( lk_post( array( 'visitor_id' => 'd2d2d2d2-later' ) ), '203.0.113.50' );
+$late = array_key_last( lk_rows() );
+leadkit_link_gifts();
+lk_eq( lk_item( GIFTS, $g_later )['board_relation_mm84k7qr'] ?? null, array( 'item_ids' => array( (int) $late ) ), 'visitor: a Visitors row written later is connected on a later run' );
+lk_eq( lk_item( VB, $late )['board_relation_mm84ysfv'] ?? null, array( 'item_ids' => array( (int) $grace ) ), 'visitor: and that browser gets the donor' );
+lk_ok( isset( get_option( 'leadkit_gifts_done' )[ $g_later ] ), 'visitor: then the gift is finished' );
+// One whose row never comes is let go after a week.
+$g_lost = lk_gift( 'Grace Liu', array( 'board_relation_mm83z7sa' => array( 'item_ids' => array( (int) $grace ) ), 'text_mm84wm8e' => 'e3e3e3e3-never' ), 8 * DAY_IN_SECONDS );
+leadkit_link_gifts();
+lk_ok( isset( get_option( 'leadkit_gifts_done' )[ $g_lost ] ), 'visitor: a gift whose Visitors row never comes is let go after a week' );
+
+// A group for new people that the board does not have: nobody is put in the wrong one.
+lk_gift_boards_full();
+lk_set( array( 'people_group' => 'Donors 2027' ) );
+$g = lk_gift( 'Kim Tran', lk_email( 'kim@example.org' ) );
+leadkit_link_gifts();
+lk_eq( array( count( lk_people_named( 'Kim Tran' ) ), isset( get_option( 'leadkit_gifts_done', array() )[ $g ] ) ), array( 0, false ), 'new donor: a group not on People — nobody made, and the gift waits' );
+lk_set( array( 'people_group' => 'group_new' ) );
+leadkit_link_gifts();
+lk_eq( lk_person_item( 'Kim Tran' )['group'] ?? null, 'group_new', 'new donor: once the group is right (here by its id), the donor is made there' );
+
+// The wait before making a donor follows the setting.
+lk_gift_boards_full();
+lk_set( array( 'gift_grace' => '2' ) );
+lk_gift( 'Quick Donor', lk_email( 'quick@example.org' ), 3 * MINUTE_IN_SECONDS );
+lk_gift( 'Very Quick Donor', lk_email( 'veryquick@example.org' ), MINUTE_IN_SECONDS );
+leadkit_link_gifts();
+lk_eq( array( count( lk_people_named( 'Quick Donor' ) ), count( lk_people_named( 'Very Quick Donor' ) ) ), array( 1, 0 ), 'wait set to 2 minutes: a 3-minute-old gift gets its donor, a 1-minute-old one waits' );
+
+// ---- 12c. Column ids that go stale are found again by title ----------------------------------
+// The duplicate Person column is deleted on monday.com and another renamed "Person".
+lk_gift_boards();
+$grace = lk_person( 'Grace Liu', 'grace@example.org' );
+leadkit_link_gifts(); // The column ids cached.
+unset( LkMonday::$boards[ GIFTS ]['cols']['board_relation_mm83z7sa'] );
+LkMonday::$boards[ GIFTS ]['cols']['board_relation_mm8renamed'] = array( 'Person', 'board_relation' );
+$g = lk_gift( 'Grace Liu', lk_email( 'grace@example.org' ) );
+LkMonday::$calls = array();
+leadkit_link_gifts();
+leadkit_link_gifts();
+lk_eq( lk_item( GIFTS, $g )['board_relation_mm8renamed'] ?? null, array( 'item_ids' => array( (int) $grace ) ), 'columns: a column deleted and another renamed in its place is used by the next run, not a day later' );
+lk_eq( array_values( array_filter( LkMonday::mutations(), fn( $c ) => false !== strpos( json_encode( $c['v'] ), 'board_relation_mm83z7sa' ) ) ), array(), 'columns: nothing is written to the deleted column' );
+
+// monday.com refuses a write to a column that is gone (People's Email): found again, the donor made once.
+lk_gift_boards();
+leadkit_link_gifts();
+unset( LkMonday::$boards[ PEOPLE ]['cols']['email_mm83fpfp'] );
+LkMonday::$boards[ PEOPLE ]['cols']['email_mm8renamed'] = array( 'Email', 'email' );
+lk_gift( 'Lee Park', lk_email( 'lee@example.org' ) );
+leadkit_link_gifts();
+leadkit_link_gifts();
+lk_eq( array( count( lk_people_named( 'Lee Park' ) ), lk_person_item( 'Lee Park' )['values']['email_mm8renamed']['email'] ?? null ), array( 1, 'lee@example.org' ), 'columns: a write refused for a column that is gone — the next run finds it again and makes the donor once' );
+
+// The older API's error, at the top level, counts too.
+lk_gift_boards();
+$gen = (int) get_option( 'leadkit_mc_gen', 0 );
+LkMonday::$fault = fn( $q, $v ) => array( 'error_code' => 'InvalidColumnIdException', 'status_code' => 200, 'error_message' => "This column ID doesn't exist for the board" );
+leadkit_visitor_set( GIFTS, '1', array( 'text_gone' => 'x' ) );
+LkMonday::$fault = null;
+lk_eq( (int) get_option( 'leadkit_mc_gen', 0 ), $gen + 1, 'columns: the older API\'s InvalidColumnIdException forgets them too' );
+
+// Settings saved after a column is renamed: the very next run uses the new one.
+lk_gift_boards();
+$grace = lk_person( 'Grace Liu', 'grace@example.org' );
+leadkit_link_gifts();
+unset( LkMonday::$boards[ GIFTS ]['cols']['link_mm84y7n4'] );
+LkMonday::$boards[ GIFTS ]['cols']['link_mm8renamed'] = array( 'Open person', 'link' );
+do_action( 'update_option_leadkit_options' );
+$g = lk_gift( 'Grace Liu', array( 'board_relation_mm83z7sa' => array( 'item_ids' => array( (int) $grace ) ) ) );
+leadkit_link_gifts();
+lk_eq( lk_item( GIFTS, $g )['link_mm8renamed']['url'] ?? null, LkMonday::url( PEOPLE, $grace ), 'columns: saving the settings forgets the column ids, so the next run already uses the renamed column' );
+
 // Off without a Donations board, and the schedule follows the setting.
 $GLOBALS['lk_cron'] = array();
 function wp_next_scheduled( $h ) {
@@ -564,8 +716,18 @@ function wp_schedule_event( $t, $r, $h ) {
 function wp_clear_scheduled_hook( $h ) {
 	unset( $GLOBALS['lk_cron'][ $h ] );
 }
+function wp_get_schedule( $h ) {
+	return $GLOBALS['lk_cron'][ $h ] ?? false;
+}
 do_action( 'init' );
 lk_eq( $GLOBALS['lk_cron']['leadkit_link_gifts'] ?? null, 'leadkit_quarter_hour', 'linker: scheduled every 15 minutes when set up' );
+lk_set( array( 'background_minutes' => '5' ) );
+do_action( 'init' );
+lk_eq( $GLOBALS['lk_cron']['leadkit_link_gifts'] ?? null, 'leadkit_five_minutes', 'linker: moved to every 5 minutes when Background runs says so' );
+lk_eq( apply_filters( 'cron_schedules', array() )['leadkit_five_minutes']['interval'] ?? null, 300, 'linker: the 5-minute schedule exists' );
+lk_set( array( 'background_minutes' => '15' ) );
+do_action( 'init' );
+lk_eq( $GLOBALS['lk_cron']['leadkit_link_gifts'] ?? null, 'leadkit_quarter_hour', 'linker: and back to 15' );
 $o = get_option( 'leadkit_options' );
 $o['monday_donations_board'] = '';
 update_option( 'leadkit_options', $o );

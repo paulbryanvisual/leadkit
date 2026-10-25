@@ -41,6 +41,75 @@ function leadkit_monday_people_board() {
 }
 
 /**
+ * The transient a board's column ids are cached under. The key carries a
+ * generation number, so leadkit_monday_forget_columns() clears every one of
+ * them at once, in the database or in an object cache.
+ *
+ * @param string $cache Cache name.
+ * @param string $board Board id.
+ * @return string
+ */
+function leadkit_monday_columns_key( $cache, $board ) {
+	return 'leadkit_mc_' . $cache . '_' . $board . '_' . (int) get_option( 'leadkit_mc_gen', 0 );
+}
+
+/**
+ * Forget every cached column id, so each is found again by title the next
+ * time it is needed: after monday.com refuses a column id (one deleted, or a
+ * duplicate deleted and another renamed in its place) and when the settings
+ * change. Without this a renamed column stayed unusable for up to a day.
+ */
+function leadkit_monday_forget_columns() {
+	update_option( 'leadkit_mc_gen', (int) get_option( 'leadkit_mc_gen', 0 ) + 1, true );
+}
+
+// Settings changed (a board, say): column ids are found again by title.
+add_action(
+	'update_option_leadkit_options',
+	function () {
+		leadkit_monday_forget_columns();
+	}
+);
+
+/**
+ * Every column on a board, by lowercase title, without creating any. Cached
+ * a day.
+ *
+ * @param string $board Board id.
+ * @return array|null title => { id, type }.
+ */
+function leadkit_monday_board_columns( $board ) {
+	$key    = leadkit_monday_columns_key( 'all', $board );
+	$cached = get_transient( $key );
+	if ( is_array( $cached ) ) {
+		return $cached;
+	}
+	$data = leadkit_monday( 'query ($b: [ID!]) { boards(ids: $b) { columns { id title type } } }', array( 'b' => array( (string) $board ) ) );
+	$list = $data['boards'][0]['columns'] ?? null;
+	if ( ! is_array( $list ) ) {
+		return null;
+	}
+	$cols = array();
+	foreach ( $list as $c ) {
+		$cols[ strtolower( trim( (string) $c['title'] ) ) ] = array( 'id' => (string) $c['id'], 'type' => (string) ( $c['type'] ?? '' ) );
+	}
+	set_transient( $key, $cols, DAY_IN_SECONDS );
+	return $cols;
+}
+
+/**
+ * A board's groups. Not cached: asked only when a person is made.
+ *
+ * @param string $board Board id.
+ * @return array|null group id => title; null when monday.com could not be asked.
+ */
+function leadkit_monday_groups( $board ) {
+	$data = leadkit_monday( 'query ($b: [ID!]) { boards(ids: $b) { groups { id title } } }', array( 'b' => array( (string) $board ) ) );
+	$list = $data['boards'][0]['groups'] ?? null;
+	return is_array( $list ) ? array_column( $list, 'title', 'id' ) : null;
+}
+
+/**
  * Find columns on a board by title, creating the missing ones. Cached a day.
  *
  * @param string $board Board id.
@@ -49,7 +118,7 @@ function leadkit_monday_people_board() {
  * @return array|null slot => column id.
  */
 function leadkit_monday_ensure_columns( $board, $want, $cache ) {
-	$key    = 'leadkit_mc_' . $cache . '_' . $board;
+	$key    = leadkit_monday_columns_key( $cache, $board );
 	$cached = get_transient( $key );
 	if ( is_array( $cached ) && count( $cached ) === count( $want ) ) {
 		return $cached;

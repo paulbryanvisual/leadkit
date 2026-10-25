@@ -302,6 +302,19 @@ class LkMonday {
 		}
 		return isset( $val['item_ids'] ) ? '' : json_encode( $val );
 	}
+	/** The first column id a write names that the board does not have, or ''. */
+	public static function gone_column( $b, $values ) {
+		foreach ( array_keys( (array) $values ) as $col ) {
+			if ( isset( self::$boards[ $b ]['cols'] ) && ! isset( self::$boards[ $b ]['cols'][ $col ] ) ) {
+				return (string) $col;
+			}
+		}
+		return '';
+	}
+	/** monday.com's answer to a column id that does not exist. */
+	public static function gone_error( $col ) {
+		return array( 'message' => "This column ID doesn't exist for the board", 'extensions' => array( 'code' => 'InvalidColumnIdException', 'error_data' => array( 'column_id' => $col ) ) );
+	}
 	public static function find_item( $id ) {
 		foreach ( self::$boards as $b => $board ) {
 			if ( isset( $board['items'][ (string) $id ] ) ) {
@@ -338,6 +351,12 @@ class LkMonday {
 					$errors[]      = array( 'message' => 'refused ' . $m[1] );
 					continue;
 				}
+				$gone = self::gone_column( $b, json_decode( $args['column_values'] ?? '{}', true ) );
+				if ( $gone ) {
+					$data[ $m[1] ] = null;
+					$errors[]      = self::gone_error( $gone );
+					continue;
+				}
 				if ( 'create_item' === $m[2] ) {
 					$id                                = (string) ( self::$next++ );
 					self::$boards[ $b ]['items'][ $id ] = array( 'name' => $args['item_name'], 'created_at' => gmdate( 'c' ), 'values' => json_decode( $args['column_values'] ?? '{}', true ) ?: array() );
@@ -355,7 +374,8 @@ class LkMonday {
 			return array( 'data' => $data ) + ( $errors ? array( 'errors' => $errors ) : array() );
 		}
 
-		// Newest items on a board, with some columns (the gift linker).
+		// Newest items on a board, with some columns (the gift linker). Like
+		// monday.com, a column id the board does not have is left out, silently.
 		if ( false !== strpos( $q, 'order_by' ) ) {
 			$b     = (string) $v['b'][0];
 			$items = self::$boards[ $b ]['items'] ?? array();
@@ -364,8 +384,11 @@ class LkMonday {
 			foreach ( array_slice( $items, 0, 100, true ) as $id => $it ) {
 				$cvs = array();
 				foreach ( $v['c'] as $c ) {
+					if ( ! isset( self::$boards[ $b ]['cols'][ $c ] ) ) {
+						continue;
+					}
 					$val   = $it['values'][ $c ] ?? null;
-					$cvs[] = array( 'id' => $c, 'text' => null === $val ? null : self::text( $val ), 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) );
+					$cvs[] = array( 'id' => $c, 'text' => null === $val ? null : self::text( $val ), 'value' => null === $val ? null : json_encode( $val ), 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) );
 				}
 				$out[] = array( 'id' => (string) $id, 'name' => $it['name'], 'created_at' => $it['created_at'] ?? gmdate( 'c' ), 'column_values' => $cvs );
 			}
@@ -416,14 +439,27 @@ class LkMonday {
 			if ( ! isset( self::$boards[ (string) $v['b'] ] ) ) {
 				return $err( 'board not found' );
 			}
+			$values = json_decode( $v['v'] ?? '{}', true ) ?: array();
+			$gone   = self::gone_column( (string) $v['b'], $values );
+			if ( $gone ) {
+				return array( 'errors' => array( self::gone_error( $gone ) ) );
+			}
 			$id = (string) ( self::$next++ );
-			self::$boards[ (string) $v['b'] ]['items'][ $id ] = array( 'name' => $v['n'], 'created_at' => gmdate( 'c' ), 'values' => json_decode( $v['v'] ?? '{}', true ) ?: array() );
+			self::$boards[ (string) $v['b'] ]['items'][ $id ] = array( 'name' => $v['n'], 'created_at' => gmdate( 'c' ), 'values' => $values, 'group' => $v['g'] ?? null );
 			return array( 'data' => array( 'create_item' => array( 'id' => $id, 'url' => self::url( $v['b'], $id ) ) ) );
+		}
+		if ( false !== strpos( $q, 'groups { id title }' ) ) {
+			$groups = self::$boards[ (string) $v['b'][0] ]['groups'] ?? array( 'topics' => 'Group Title' );
+			return array( 'data' => array( 'boards' => array( array( 'groups' => array_map( fn( $id, $t ) => array( 'id' => (string) $id, 'title' => $t ), array_keys( $groups ), $groups ) ) ) ) );
 		}
 		if ( false !== strpos( $q, 'change_multiple_column_values' ) ) {
 			$b = (string) $v['b'];
 			if ( ! isset( self::$boards[ $b ]['items'][ (string) $v['i'] ] ) ) {
 				return $err( 'Item not found in board' );
+			}
+			$gone = self::gone_column( $b, json_decode( $v['v'], true ) );
+			if ( $gone ) {
+				return array( 'errors' => array( self::gone_error( $gone ) ) );
 			}
 			foreach ( json_decode( $v['v'], true ) as $col => $val ) {
 				self::$boards[ $b ]['items'][ (string) $v['i'] ]['values'][ $col ] = $val;

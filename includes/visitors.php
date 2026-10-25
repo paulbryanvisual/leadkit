@@ -752,6 +752,32 @@ function leadkit_visitor_find_row( $board, $col, $visitor ) {
 }
 
 /**
+ * The rows for several visitors, in one request.
+ *
+ * @param string   $board    Board id.
+ * @param string   $col      visitorid column id.
+ * @param string[] $visitors Visitor ids.
+ * @return array|null visitor id => item id, for those found; null when monday.com could not be asked.
+ */
+function leadkit_visitor_find_rows( $board, $col, $visitors ) {
+	$data = leadkit_monday(
+		'query ($b: ID!, $c: String!, $v: [String]!, $r: [String!]) { items_page_by_column_values(board_id: $b, limit: 100, columns: [{column_id: $c, column_values: $v}]) { items { id column_values(ids: $r) { text } } } }',
+		array( 'b' => (string) $board, 'c' => (string) $col, 'v' => array_values( $visitors ), 'r' => array( (string) $col ) )
+	);
+	if ( null === $data ) {
+		return null;
+	}
+	$rows = array();
+	foreach ( (array) ( $data['items_page_by_column_values']['items'] ?? array() ) as $it ) {
+		$visitor = trim( (string) ( $it['column_values'][0]['text'] ?? '' ) );
+		if ( '' !== $visitor && ! isset( $rows[ $visitor ] ) ) {
+			$rows[ $visitor ] = (string) $it['id'];
+		}
+	}
+	return $rows;
+}
+
+/**
  * Create the row, named by its visitor id.
  *
  * @param string $board   Board id.

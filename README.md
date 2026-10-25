@@ -24,7 +24,10 @@ campaign is stamped onto donation links with the visitor id, packed into
 because Give Lively keeps only that field. With a monday.com Visitors board
 set, each Donate click and form submission keeps that visitor's row current,
 so a gift can be joined to the visits before it — and with a Visits board,
-each visit gets a row of its own with the site that sent it. With a **Visits
+each visit gets a row of its own with the site that sent it. With a
+Donations board, LeadKit unpacks each gift's packed source, connects the gift
+to that row and finds or makes the donor, so Zapier only has to create the
+gift. With a **Visits
 Worker** set, every browser's visits go to a Cloudflare Worker that keeps
 them in D1 until the browser reaches a goal (by default a Donate click or a
 form; the Worker's WARM_RULES setting decides), then it comes to those boards

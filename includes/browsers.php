@@ -12,8 +12,9 @@
  * marked known; returning visitors and campaign arrivals can be added. Until
  * then a browser's visits stay in D1 only.
  *
- * Every 15 minutes LeadKit asks the Worker for the warm browsers whose story
- * changed (GET /warm), writes each to the Visitors and Visits boards with
+ * Every 15 minutes (or 5: Settings → LeadKit → Background runs) LeadKit asks
+ * the Worker for the warm browsers whose story changed (GET /warm), writes
+ * each to the Visitors and Visits boards with
  * the same writer a Donate click uses — so a browser's whole history arrives
  * the moment it turns warm — and tells the Worker which it sent (POST /sent,
  * by hash, so a story that changed meanwhile stays pending).
@@ -36,13 +37,7 @@ const LEADKIT_BROWSERS_STATS   = 'leadkit_visits_stats';
 add_action(
 	'init',
 	function () {
-		$next = wp_next_scheduled( LEADKIT_BROWSERS_HOOK );
-		$on   = leadkit_browsers_enabled() && leadkit_visitors_enabled();
-		if ( $on && ! $next ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'leadkit_quarter_hour', LEADKIT_BROWSERS_HOOK );
-		} elseif ( ! $on && $next ) {
-			wp_clear_scheduled_hook( LEADKIT_BROWSERS_HOOK );
-		}
+		leadkit_keep_scheduled( LEADKIT_BROWSERS_HOOK, leadkit_browsers_enabled() && leadkit_visitors_enabled() );
 	}
 );
 add_action( LEADKIT_BROWSERS_HOOK, 'leadkit_send_warm_browsers' );
@@ -134,7 +129,7 @@ function leadkit_visits_call( $method, $path, $body = null, $wait = true, $timeo
 }
 
 /**
- * Every 15 minutes: send the warm browsers whose story changed.
+ * Each background run: send the warm browsers whose story changed.
  *
  * @return int Browsers sent.
  */

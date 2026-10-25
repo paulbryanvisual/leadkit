@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.8.0
+
+The gift linker does the general linking, so a Zap only has to create the
+gift — one Zapier task instead of about five.
+
+- **Unpacks the packed source.** For each gift it has not finished, LeadKit
+  reads "Packed source (raw)" (the `utm_source` a donation link carried) and
+  fills the gift's empty `utm_medium`, `utm_source`, `utm_campaign`,
+  `utm_content`, `utm_term` and `visitorid` columns with
+  `leadkit_unpack_source()`. Only text columns the board already has, and
+  only empty ones: a column filled by hand is kept, and a field with no
+  column is left out — none is created.
+- **Connects the gift's Visitor** by visitorid, the rows for every waiting
+  gift found in one request (`leadkit_visitor_find_rows()`), and in the
+  same run gives that browser the donor. A gift whose browser's row is not
+  written yet is tried again each run for a week, as before. No monday.com
+  visitorid automation is needed any more.
+- **New donors** go in **Group for new people** (Settings → LeadKit; a
+  group's title or id), not the People board's top group. A name the board
+  does not have stops LeadKit making donors, and the settings screen says
+  so, rather than put them in the wrong group; their gifts are linked once
+  it is fixed. Each "Donor X" column on the gift is copied to People's "X"
+  column where both exist: text to text, and a phone to a phone column only
+  with its country, so a number monday.com would refuse cannot stop the
+  person being made.
+- **Wait before making a donor (minutes)**: the grace a gift with no Person
+  gets before LeadKit finds or makes the donor, 10 by default as before
+  (`LEADKIT_GIFT_GRACE`), 0–60. 2 is enough once Zapier only creates the
+  gift.
+- **Background runs**: every 15 minutes (default) or 5, for the gift linker
+  and the warm-browser sender (`leadkit_five_minutes`, 300 seconds). Each
+  hook is moved to the new schedule on the next page load after the setting
+  changes (`leadkit_keep_scheduled()`).
+- **Column ids heal themselves.** Every cached column-id transient carries
+  a generation number (`leadkit_monday_columns_key()`), and
+  `leadkit_monday_forget_columns()` moves it on. That happens when
+  monday.com refuses a column id (`InvalidColumnIdException`, in the error
+  list or at the top level as the older API sends it), when the linker's
+  read leaves out a cached column (monday.com silently drops ids that no
+  longer exist), and when LeadKit's settings change. A renamed or deleted
+  column is found again by title on the next run instead of up to a day
+  later. The return-visit, People-roll-up and summary column caches use the
+  same keys.
+- The fake monday.com in `scripts/wp-stubs.php` now behaves like the real
+  one: a read leaves out column ids the board does not have, a write to one
+  is refused with `InvalidColumnIdException`, and items keep their group.
+  `scripts/check-visitors.php` (section 12b–c) and
+  `scripts/check-browsers.php` (schedule, settings) cover the above.
+
 ## 1.7.1
 
 "Check again" finds a new LeadKit at once, and the help text says visits stay

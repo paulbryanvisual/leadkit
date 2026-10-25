@@ -263,7 +263,7 @@ function leadkit_journey_update_html( $s ) {
  * @return array|null { level, source, minutes, pages, journey } => column id.
  */
 function leadkit_monday_summary_columns( $board ) {
-	$key    = 'leadkit_monday_scols_' . $board;
+	$key    = leadkit_monday_columns_key( 'scols', $board );
 	$cached = get_transient( $key );
 	if ( is_array( $cached ) && count( $cached ) === 5 ) {
 		return $cached;

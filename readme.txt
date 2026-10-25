@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.7.1
+Stable tag: 1.8.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -89,7 +89,11 @@ The packed source on donation links: key.value pairs in this order, "__"
 between pairs (or "-" with the leadkit/packed_pair_separator filter), empty
 pairs left out, values folded to [a-z0-9] and single dashes:
   medium · source · campaign · content · term · visitorid
-scripts/zapier-code-step.js is the Code by Zapier step that splits it back.
+With a Donations board, LeadKit splits it back itself: a gift's "Packed
+source (raw)" column fills its empty utm_medium … utm_term and visitorid
+columns, so the Zap that creates the gift needs no Code step.
+scripts/zapier-code-step.js is that Code by Zapier step, for a Zap that
+still wants one.
 
 A campaign touch (`utm`, `utm_first`, each of `utm_touches`) is
   { source, medium, campaign, content, term, click_id?, landing, time }
@@ -112,11 +116,27 @@ campaign credited when the visitor came back from the donation host).
 * monday.com Visits board — with a Visitors board, one row per visit (pages
   with no gap over 30 minutes), connected to its visitor: Started, Referrer,
   Source, Landing page, Pages, Seconds on site, Donate clicks, Forms, Journey.
-* monday.com Donations board — with a People board, every 15 minutes LeadKit
-  links the newest gifts: finds or creates the donor by email, gives the
-  gift's browser the same person, and fills Open person links. Its Person
-  column must be two-way for People's Total given. On a cached host, run
-  wp-cron.php from a real cron every 15 minutes.
+* monday.com Donations board — with a People board, each background run
+  LeadKit links the newest gifts: unpacks "Packed source (raw)" into the
+  empty utm_ and visitorid columns the board has (none is created),
+  connects the gift's Visitor by visitorid (retried for a week while the
+  browser's row is not written yet), finds or creates the donor by email —
+  copying each "Donor X" column to People's "X" column, text to text and a
+  phone with its country to a phone column — gives the gift's browser the
+  same person, and fills Open person links. Its Person column must be
+  two-way for People's Total given.
+* Group for new people — the People group a donor LeadKit makes goes in, by
+  title or id. Empty = the board's top group. A name the board does not have
+  stops LeadKit making donors (the settings screen says so) rather than put
+  them in the wrong group.
+* Wait before making a donor (minutes) — how long a gift with no Person is
+  left to Zapier and monday.com automations first (default 10, 0–60).
+* Background runs — every 15 minutes (default) or 5, for the gift linker and
+  the warm-browser sender. A changed setting reschedules both. On a cached
+  host, run wp-cron.php from a real cron at the same interval.
+* Column ids are cached a day, and forgotten — found again by title — when
+  monday.com refuses one (InvalidColumnIdException), when a read leaves a
+  cached column out, and when the settings change.
 * Untracked pages — path prefixes (e.g. /help/) where the tracker is not
   loaded and nothing is recorded or sent.
 * Form hosts — comma-separated domains of outside forms that take hidden
@@ -131,6 +151,16 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.8.0 =
+* Gift linker does the general linking, so Zapier only has to create the
+  gift: it unpacks the packed source into the gift's utm and visitorid
+  columns, connects the gift's Visitor by visitorid, and puts a donor it
+  makes in a chosen group with their phone and address.
+* Settings: Group for new people, Wait before making a donor, and
+  Background runs (every 15 or 5 minutes).
+* Column ids heal themselves: a renamed or deleted column is found again by
+  title on the next run, not a day later.
 
 = 1.7.1 =
 * "Check again" under Dashboard → Updates finds a new LeadKit release at

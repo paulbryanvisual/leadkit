@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.7.1
+ * Version:           1.8.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan, PrettyGrand.com
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.7.1' );
+define( 'LEADKIT_VERSION', '1.8.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -69,10 +69,16 @@ function leadkit_options() {
 		'monday_visitors_board' => '',
 		'monday_visits_board' => '',
 		'monday_donations_board' => '',
+		// The gift linker: where a donor it makes goes, and how long it
+		// leaves a gift with no Person to Zapier first (minutes).
+		'people_group'      => '',
+		'gift_grace'        => '10',
 		// Every visit kept in Cloudflare D1 by the Visits Worker; warm or
 		// known browsers come to monday.com.
 		'visits_url'        => '',
 		'visits_secret'     => '',
+		// The gift linker's and the warm-browser sender's schedule (minutes).
+		'background_minutes' => '15',
 		'untracked_paths'   => '',
 		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
@@ -114,7 +120,7 @@ function leadkit_options() {
 	return $opts;
 }
 
-/** The 15-minute schedules (gift linker, warm browsers) go with the plugin. */
+/** The background schedules (gift linker, warm browsers) go with the plugin. */
 register_deactivation_hook(
 	__FILE__,
 	function () {
