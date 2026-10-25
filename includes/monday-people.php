@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @return array|null { ids, count } => column id.
  */
 function leadkit_monday_people_columns( $board ) {
-	$key    = 'leadkit_monday_pcols_' . $board;
+	$key    = leadkit_monday_columns_key( 'pcols', $board );
 	$cached = get_transient( $key );
 	if ( is_array( $cached ) && ! empty( $cached['ids'] ) && ! empty( $cached['count'] ) ) {
 		return $cached;

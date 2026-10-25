@@ -2,10 +2,12 @@
 /**
  * The gift linker — the connections monday.com's own automations cannot make.
  *
- * Gifts reach a monday.com Donations board through Zapier. Two monday.com
- * "match" automations then connect each new gift to an EXISTING visitor (by
- * visitorid) and an EXISTING person (by email). What they cannot do:
+ * Gifts reach a monday.com Donations board through Zapier, which only creates
+ * the gift. A monday.com "match" automation may connect it to an EXISTING
+ * person by email at once. What automations cannot do:
  *
+ *   - unpack the packed source a donation link carried (formula columns can
+ *     neither trigger nor feed an automation);
  *   - create the person when no one on People has that email yet (the match
  *     template has no create-if-missing, and Zapier's monday.com search has
  *     no find-or-create either);
@@ -13,15 +15,23 @@
  *     item from the one that triggered the automation;
  *   - write a link that opens the person's own card.
  *
- * So every 15 minutes LeadKit looks at the newest gifts (Settings → LeadKit →
- * monday.com Donations board) and, for each one it has not finished:
+ * So every 15 minutes (or 5: Settings → LeadKit → Background runs) LeadKit
+ * looks at the newest gifts (Settings → LeadKit → monday.com Donations board)
+ * and, for each one it has not finished:
  *
- *   1. no Person 10 minutes after the gift arrived (Zapier's own find-or-create
- *      and the email match go first): finds the donor on People by email, or
- *      creates them, and sets the gift's Person (a two-way column, so the
+ *   1. unpacks "Packed source (raw)" into the gift's empty utm_medium,
+ *      utm_source, utm_campaign, utm_content, utm_term and visitorid columns
+ *      — those the board has; none is created;
+ *   2. connects the gift's Visitor: the Visitors row with its visitorid;
+ *   3. no Person some minutes after the gift arrived (Settings → LeadKit →
+ *      Wait before making a donor, 10 by default; Zapier and the email match
+ *      go first): finds the donor on People by email, or creates them — in
+ *      the group set for new people, named from the gift's Donor name (else
+ *      the gift's own name), with its Donor phone, street and the like
+ *      copied — and sets the gift's Person (a two-way column, so the
  *      person's Donations and Total given follow);
- *   2. fills the gift's "Open person" link;
- *   3. a Visitor whose row has no Person yet: gives it this gift's person, and
+ *   4. fills the gift's "Open person" link;
+ *   5. a Visitor whose row has no Person yet: gives it this gift's person, and
  *      fills "Open person" on that browser's row and its visit rows. A browser
  *      that already belongs to someone (a shared computer) is left alone: the
  *      gift is already on the right person, by email.
@@ -38,9 +48,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 const LEADKIT_GIFT_HOOK      = 'leadkit_link_gifts';
 const LEADKIT_GIFT_WAIT      = 7 * DAY_IN_SECONDS;
-const LEADKIT_GIFT_GRACE     = 10 * MINUTE_IN_SECONDS;
+const LEADKIT_GIFT_GRACE     = 10 * MINUTE_IN_SECONDS; // Unless the setting says otherwise.
 const LEADKIT_GIFTS_PER_RUN  = 25;
 const LEADKIT_GIFTS_REMEMBER = 3000;
+// A packed source's fields, and the Donations columns (by title) they fill.
+const LEADKIT_GIFT_UNPACK = array(
+	'medium'    => 'utm_medium',
+	'source'    => 'utm_source',
+	'campaign'  => 'utm_campaign',
+	'content'   => 'utm_content',
+	'term'      => 'utm_term',
+	'visitorid' => 'visitorid',
+);
 
 add_filter(
 	'cron_schedules',
@@ -49,19 +68,46 @@ add_filter(
 			'interval' => 15 * MINUTE_IN_SECONDS,
 			'display'  => __( 'Every 15 minutes (LeadKit)', 'leadkit' ),
 		);
+		$schedules['leadkit_five_minutes'] = array(
+			'interval' => 5 * MINUTE_IN_SECONDS,
+			'display'  => __( 'Every 5 minutes (LeadKit)', 'leadkit' ),
+		);
 		return $schedules;
 	}
 );
 
+/**
+ * The background runs' schedule — the gift linker and the warm-browser
+ * sender: Settings → LeadKit → Background runs, 15 minutes unless set to 5.
+ *
+ * @return string
+ */
+function leadkit_background_schedule() {
+	return '5' === (string) ( leadkit_options()['background_minutes'] ?? '' ) ? 'leadkit_five_minutes' : 'leadkit_quarter_hour';
+}
+
+/**
+ * Keep a background hook scheduled while it has work to do, on the set
+ * schedule — moved to it when the setting changes — and cleared when not.
+ *
+ * @param string $hook Cron hook.
+ * @param bool   $on   Whether it has work to do.
+ */
+function leadkit_keep_scheduled( $hook, $on ) {
+	$next = wp_next_scheduled( $hook );
+	$want = leadkit_background_schedule();
+	if ( $on && ( ! $next || wp_get_schedule( $hook ) !== $want ) ) {
+		wp_clear_scheduled_hook( $hook );
+		wp_schedule_event( time() + MINUTE_IN_SECONDS, $want, $hook );
+	} elseif ( ! $on && $next ) {
+		wp_clear_scheduled_hook( $hook );
+	}
+}
+
 add_action(
 	'init',
 	function () {
-		$next = wp_next_scheduled( LEADKIT_GIFT_HOOK );
-		if ( leadkit_gifts_enabled() && ! $next ) {
-			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'leadkit_quarter_hour', LEADKIT_GIFT_HOOK );
-		} elseif ( ! leadkit_gifts_enabled() && $next ) {
-			wp_clear_scheduled_hook( LEADKIT_GIFT_HOOK );
-		}
+		leadkit_keep_scheduled( LEADKIT_GIFT_HOOK, leadkit_gifts_enabled() );
 	}
 );
 add_action( LEADKIT_GIFT_HOOK, 'leadkit_link_gifts' );
@@ -82,6 +128,46 @@ function leadkit_monday_donations_board() {
  */
 function leadkit_gifts_enabled() {
 	return '' !== leadkit_monday_token() && '' !== leadkit_monday_donations_board() && '' !== leadkit_monday_people_board();
+}
+
+/**
+ * How long a gift with no Person is left to others before LeadKit makes the
+ * donor (Settings → LeadKit → Wait before making a donor): Zapier or the email
+ * match making the person at the same moment would make two.
+ *
+ * @return int Seconds.
+ */
+function leadkit_gift_grace() {
+	$min = trim( (string) ( leadkit_options()['gift_grace'] ?? '' ) );
+	return '' === $min ? LEADKIT_GIFT_GRACE : max( 0, (int) $min ) * MINUTE_IN_SECONDS;
+}
+
+/**
+ * The group new people go in (Settings → LeadKit → Group for new people), set
+ * by its title or id.
+ *
+ * @param string $people People board id.
+ * @return string|null Group id, or '' for monday.com's own choice (the top
+ *                     group) when none is set; null when the one set is not
+ *                     on the board, or monday.com could not be asked — then
+ *                     nobody is made, rather than put in the wrong group.
+ */
+function leadkit_gift_people_group( $people ) {
+	$want = trim( (string) ( leadkit_options()['people_group'] ?? '' ) );
+	if ( '' === $want ) {
+		return '';
+	}
+	$groups = leadkit_monday_groups( $people );
+	if ( null === $groups ) {
+		return null;
+	}
+	foreach ( $groups as $id => $title ) {
+		if ( (string) $id === $want || 0 === strcasecmp( trim( (string) $title ), $want ) ) {
+			return (string) $id;
+		}
+	}
+	update_option( 'leadkit_last_monday_error', sprintf( 'No group "%s" on the People board', $want ), false );
+	return null;
 }
 
 /**
@@ -106,12 +192,49 @@ function leadkit_gift_columns( $board ) {
 }
 
 /**
+ * A gift's "Donor X" columns as a new person's "X" columns — Donor phone to
+ * Phone, Donor city to City — where the People board has a column of that
+ * title: text into a text column, a phone column's value into a phone column.
+ *
+ * @param array  $g      The gift, with its column texts and values.
+ * @param array  $donor  Gift column id => title without "donor ".
+ * @param string $people People board id.
+ * @return array Column values.
+ */
+function leadkit_gift_donor_details( $g, $donor, $people ) {
+	$to  = $donor ? leadkit_monday_board_columns( $people ) : null;
+	$out = array();
+	foreach ( $donor as $id => $title ) {
+		$col  = $to[ $title ] ?? null;
+		$text = trim( (string) ( $g['text'][ $id ] ?? '' ) );
+		if ( ! $col || '' === $text ) {
+			continue;
+		}
+		if ( 'text' === $col['type'] ) {
+			$out[ $col['id'] ] = mb_substr( $text, 0, 2000 );
+		} elseif ( 'long_text' === $col['type'] ) {
+			$out[ $col['id'] ] = array( 'text' => mb_substr( $text, 0, 20000 ) );
+		} elseif ( 'phone' === $col['type'] ) {
+			// A phone column's own value, as monday.com stored it — with its
+			// country or without (monday.com takes both). Nothing else: a
+			// number made up from text could be refused, and stop the person
+			// being made.
+			$raw = json_decode( (string) ( $g['value'][ $id ] ?? '' ), true );
+			if ( ! empty( $raw['phone'] ) ) {
+				$out[ $col['id'] ] = array( 'phone' => (string) $raw['phone'] ) + ( empty( $raw['countryShortName'] ) ? array() : array( 'countryShortName' => (string) $raw['countryShortName'] ) );
+			}
+		}
+	}
+	return $out;
+}
+
+/**
  * One run of the linker.
  *
- * @return array What happened, for the checks: { looked, linked, people, browsers }.
+ * @return array What happened, for the checks: { looked, unpacked, visitors, linked, people, browsers }.
  */
 function leadkit_link_gifts() {
-	$out = array( 'looked' => 0, 'linked' => 0, 'people' => 0, 'browsers' => 0 );
+	$out = array( 'looked' => 0, 'unpacked' => 0, 'visitors' => 0, 'linked' => 0, 'people' => 0, 'browsers' => 0 );
 	if ( ! leadkit_gifts_enabled() ) {
 		return $out;
 	}
@@ -123,18 +246,43 @@ function leadkit_link_gifts() {
 	$people = leadkit_monday_people_board();
 	$cols   = leadkit_gift_columns( $board );
 	$pcols  = $cols ? leadkit_people_columns( $people ) : null;
-	if ( ! $cols || ! $pcols ) {
+	$all    = $pcols ? leadkit_monday_board_columns( $board ) : null;
+	if ( ! $cols || ! $pcols || null === $all ) {
 		leadkit_visitor_unlock( $lock );
 		return $out;
 	}
 
-	$ids  = array_values( array_filter( array( $cols['person'], $cols['email'], $cols['open'], $cols['visitor'] ?? '', $cols['vid'] ?? '' ) ) );
+	// The packed source, and the text columns its fields go in, where the
+	// board has them; and the donor's details, for a person LeadKit makes.
+	$src    = $all['packed source (raw)']['id'] ?? '';
+	$unpack = array();
+	foreach ( $src ? LEADKIT_GIFT_UNPACK : array() as $k => $title ) {
+		if ( 'text' === ( $all[ $title ]['type'] ?? '' ) ) {
+			$unpack[ $k ] = $all[ $title ]['id'];
+		}
+	}
+	$donor = array();
+	foreach ( $all as $title => $c ) {
+		if ( 0 === strpos( $title, 'donor ' ) && 'donor email' !== $title ) {
+			$donor[ $c['id'] ] = substr( $title, 6 );
+		}
+	}
+
+	$ids  = array_values( array_unique( array_filter( array_merge( array( $cols['person'], $cols['email'], $cols['open'], $cols['visitor'] ?? '', $cols['vid'] ?? '', $src ), array_values( $unpack ), array_keys( $donor ) ) ) ) );
 	$data = leadkit_monday(
-		'query ($b: [ID!], $c: [String!]) { boards(ids: $b) { items_page(limit: 100, query_params: {order_by: [{column_id: "__creation_log__", direction: desc}]}) { items { id name created_at column_values(ids: $c) { id text ... on BoardRelationValue { linked_item_ids } } } } } }',
+		'query ($b: [ID!], $c: [String!]) { boards(ids: $b) { items_page(limit: 100, query_params: {order_by: [{column_id: "__creation_log__", direction: desc}]}) { items { id name created_at column_values(ids: $c) { id text value ... on BoardRelationValue { linked_item_ids } } } } } }',
 		array( 'b' => array( $board ), 'c' => $ids )
 	);
 	$items = $data['boards'][0]['items_page']['items'] ?? null;
 	if ( ! is_array( $items ) ) {
+		leadkit_visitor_unlock( $lock );
+		return $out;
+	}
+	// A column id that is gone (deleted, or renamed away) is simply left out
+	// of what monday.com sends back. Rather than read it as empty and write to
+	// a column that is not there, find the columns again by title next run.
+	if ( $items && array_diff( $ids, array_column( (array) $items[0]['column_values'], 'id' ) ) ) {
+		leadkit_monday_forget_columns();
 		leadkit_visitor_unlock( $lock );
 		return $out;
 	}
@@ -159,6 +307,8 @@ function leadkit_link_gifts() {
 			'open'    => trim( (string) ( $v[ $cols['open'] ]['text'] ?? '' ) ),
 			'visitor' => isset( $cols['visitor'] ) ? (string) ( $v[ $cols['visitor'] ]['linked_item_ids'][0] ?? '' ) : '',
 			'vid'     => isset( $cols['vid'] ) ? trim( (string) ( $v[ $cols['vid'] ]['text'] ?? '' ) ) : '',
+			'text'    => array_map( fn( $cv ) => trim( (string) ( $cv['text'] ?? '' ) ), $v ),
+			'value'   => array_map( fn( $cv ) => (string) ( $cv['value'] ?? '' ), $v ),
 		);
 		if ( count( $todo ) >= LEADKIT_GIFTS_PER_RUN ) {
 			break;
@@ -166,9 +316,53 @@ function leadkit_link_gifts() {
 	}
 	$out['looked'] = count( $todo );
 
+	// 1. Each packed source into its gift's empty columns.
+	$fill = array();
+	foreach ( $todo as $i => $g ) {
+		foreach ( (array) ( $unpack ? leadkit_unpack_source( $g['text'][ $src ] ?? '' ) : null ) as $k => $val ) {
+			if ( isset( $unpack[ $k ] ) && '' !== $val && '' === ( $g['text'][ $unpack[ $k ] ] ?? '' ) ) {
+				$fill[ $i ][ $unpack[ $k ] ] = $val;
+				if ( 'visitorid' === $k && '' === $g['vid'] ) {
+					$todo[ $i ]['vid'] = $val;
+				}
+			}
+		}
+	}
+
+	// 2. Each gift's Visitor, by visitorid — the rows found in one request.
+	$vboard = leadkit_monday_visitors_board();
+	$vcols  = $vboard ? leadkit_visitor_columns( $vboard ) : null;
+	$find   = array();
+	foreach ( $todo as $g ) {
+		if ( ! $g['visitor'] && $g['vid'] && ! empty( $cols['visitor'] ) && ! empty( $vcols['vid'] ) ) {
+			$find[] = $g['vid'];
+		}
+	}
+	$rows = $find ? leadkit_visitor_find_rows( $vboard, $vcols['vid'], array_unique( $find ) ) : array();
+	foreach ( $todo as $i => $g ) {
+		$values = $fill[ $i ] ?? array();
+		$row    = $g['visitor'] ? '' : (string) ( $rows[ $g['vid'] ] ?? '' );
+		if ( $row ) {
+			$values[ $cols['visitor'] ] = array( 'item_ids' => array( (int) $row ) );
+		}
+		if ( ! $values ) {
+			continue;
+		}
+		if ( ! leadkit_visitor_set( $board, $g['id'], $values ) ) {
+			$todo[ $i ]['retry'] = true; // Tried again next run, with the rest.
+			continue;
+		}
+		if ( isset( $fill[ $i ] ) ) {
+			++$out['unpacked'];
+		}
+		if ( $row ) {
+			$todo[ $i ]['visitor'] = $row;
+			++$out['visitors'];
+		}
+	}
+
 	// Who each gift's browser belongs to now, in one request.
 	$browsers = array();
-	$vcols    = leadkit_monday_visitors_board() ? leadkit_visitor_columns( leadkit_monday_visitors_board() ) : null;
 	$vids     = array_values( array_unique( array_filter( array_column( $todo, 'visitor' ) ) ) );
 	if ( $vids && $vcols && ! empty( $vcols['person'] ) ) {
 		$res = leadkit_monday(
@@ -183,12 +377,16 @@ function leadkit_link_gifts() {
 		}
 	}
 
+	$grace = leadkit_gift_grace();
 	foreach ( $todo as $g ) {
+		if ( ! empty( $g['retry'] ) ) {
+			continue;
+		}
 		$brief = null;
 
-		// 1. The person: theirs already, found by email, or made.
+		// 3. The person: theirs already, found by email, or made.
 		if ( ! $g['person'] ) {
-			if ( $g['age'] < LEADKIT_GIFT_GRACE ) {
+			if ( $g['age'] < $grace ) {
 				continue; // Zapier and the email match go first; both creating at once makes two people.
 			}
 			if ( ! $g['email'] ) {
@@ -209,19 +407,32 @@ function leadkit_link_gifts() {
 				$g['person'] = (string) $hit['id'];
 				$brief       = array( 'name' => (string) $hit['name'], 'url' => (string) $hit['url'] );
 			} else {
+				$group = leadkit_gift_people_group( $people );
+				if ( null === $group ) {
+					continue;
+				}
+				// The person's name: the gift's "Donor name" when it has one
+				// (a gift named "Oct 24, 2026 – $50 – Jane Doe", say), else the
+				// gift's own name.
+				$named = array_search( 'name', $donor, true );
+				$name  = ( false !== $named ? trim( (string) ( $g['text'][ $named ] ?? '' ) ) : '' ) ?: $g['name'] ?: $g['email'];
+				$vars  = array(
+					'b' => $people,
+					'n' => $name,
+					'v' => wp_json_encode( array( $pcols['email'] => array( 'email' => $g['email'], 'text' => $g['email'] ) ) + leadkit_gift_donor_details( $g, $donor, $people ) ),
+				);
+				if ( $group ) {
+					$vars['g'] = $group;
+				}
 				$made = leadkit_monday(
-					'mutation ($b: ID!, $n: String!, $v: JSON) { create_item(board_id: $b, item_name: $n, column_values: $v) { id url } }',
-					array(
-						'b' => $people,
-						'n' => $g['name'] ?: $g['email'],
-						'v' => wp_json_encode( array( $pcols['email'] => array( 'email' => $g['email'], 'text' => $g['email'] ) ) ),
-					)
+					'mutation ($b: ID!, $n: String!, $v: JSON' . ( $group ? ', $g: String' : '' ) . ') { create_item(board_id: $b, item_name: $n, column_values: $v' . ( $group ? ', group_id: $g' : '' ) . ') { id url } }',
+					$vars
 				);
 				$g['person'] = (string) ( $made['create_item']['id'] ?? '' );
 				if ( ! $g['person'] ) {
 					continue;
 				}
-				$brief = array( 'name' => $g['name'] ?: $g['email'], 'url' => (string) ( $made['create_item']['url'] ?? '' ) );
+				$brief = array( 'name' => $name, 'url' => (string) ( $made['create_item']['url'] ?? '' ) );
 				++$out['people'];
 			}
 			$values = array( $cols['person'] => array( 'item_ids' => array( (int) $g['person'] ) ) );
@@ -235,7 +446,7 @@ function leadkit_link_gifts() {
 			++$out['linked'];
 		}
 
-		// 2. The gift's own link to its person.
+		// 4. The gift's own link to its person.
 		if ( '' === $g['open'] ) {
 			$brief = $brief ?: leadkit_monday_item_brief( $g['person'] );
 			if ( ! $brief || ! leadkit_visitor_set( $board, $g['id'], array( $cols['open'] => leadkit_person_link( $brief ) ) ) ) {
@@ -243,12 +454,12 @@ function leadkit_link_gifts() {
 			}
 		}
 
-		// 3. The gift's browser.
+		// 5. The gift's browser.
 		if ( ! $g['visitor'] ) {
 			if ( ! $g['vid'] || $g['age'] > LEADKIT_GIFT_WAIT ) {
 				$done[ $g['id'] ] = time(); // None, or none is coming.
 			}
-			continue; // The visitorid match automation may not have run yet.
+			continue; // Its Visitors row may not have been written yet.
 		}
 		if ( ! in_array( $g['visitor'], $vids, true ) ) {
 			continue;

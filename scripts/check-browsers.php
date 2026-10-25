@@ -40,6 +40,9 @@ function wp_schedule_event( $t, $r, $h ) {
 function wp_clear_scheduled_hook( $h ) {
 	unset( $GLOBALS['lk_cron'][ $h ] );
 }
+function wp_get_schedule( $h ) {
+	return $GLOBALS['lk_cron'][ $h ] ?? false;
+}
 
 /** A fake Visits Worker: rows in memory, every call recorded. */
 class LkWorker {
@@ -204,6 +207,14 @@ lk_ok( ! leadkit_browsers_enabled(), 'a plain-http Worker URL is refused' );
 lk_setup();
 do_action( 'init' );
 lk_eq( $GLOBALS['lk_cron'][ LEADKIT_BROWSERS_HOOK ] ?? null, 'leadkit_quarter_hour', 'with a Worker and a Visitors board: every 15 minutes' );
+$o = get_option( 'leadkit_options' );
+$o['background_minutes'] = '5';
+update_option( 'leadkit_options', $o );
+do_action( 'init' );
+lk_eq( $GLOBALS['lk_cron'][ LEADKIT_BROWSERS_HOOK ] ?? null, 'leadkit_five_minutes', 'Background runs set to 5 minutes: rescheduled' );
+lk_setup( array( 'background_minutes' => '5' ) );
+do_action( 'init' );
+lk_eq( $GLOBALS['lk_cron'][ LEADKIT_BROWSERS_HOOK ] ?? null, 'leadkit_five_minutes', 'set to 5 minutes from the start: every 5 minutes' );
 
 // ---- 2. a warm browser: written with its whole history, reported sent ---------------------
 lk_setup();
@@ -319,5 +330,13 @@ lk_eq( $save( array( 'visits_url' => 'http://v.3sgf.org' ) )['visits_url'], '', 
 lk_setup();
 lk_eq( $save( array( 'visits_url' => '' ) )['visits_url'], '', 'an emptied Worker URL turns it off' );
 lk_eq( $GLOBALS['lk_notices'], array(), 'without a notice' );
+
+// ---- 6. the background-run and gift-linker settings as saved ----------------------------------
+lk_setup();
+$saved = fn( $raw ) => array_intersect_key( $save( $raw ), array_flip( array( 'background_minutes', 'gift_grace', 'people_group' ) ) );
+lk_eq( $saved( array() ), array( 'people_group' => '', 'gift_grace' => '10', 'background_minutes' => '15' ), 'settings: nothing given — 15 minutes, a 10-minute wait, the top group' );
+lk_eq( $saved( array( 'background_minutes' => '5', 'gift_grace' => '2', 'people_group' => ' New donors (from Give Lively) ' ) ), array( 'people_group' => 'New donors (from Give Lively)', 'gift_grace' => '2', 'background_minutes' => '5' ), 'settings: 5 minutes, a 2-minute wait, a group by its title' );
+lk_eq( array( $saved( array( 'background_minutes' => '1' ) )['background_minutes'] ?? null, $saved( array( 'gift_grace' => '600' ) )['gift_grace'] ?? null ), array( '15', '60' ), 'settings: an interval other than 5 is 15; a wait over an hour is an hour' );
+lk_eq( array( $saved( array( 'gift_grace' => '-3' ) )['gift_grace'] ?? null, $saved( array( 'gift_grace' => '0' ) )['gift_grace'] ?? null ), array( '0', '0' ), 'settings: a wait of 0 or less is no wait' );
 
 lk_done();

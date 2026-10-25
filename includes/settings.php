@@ -131,8 +131,12 @@ add_action(
 						'monday_visitors_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_visitors_board'] ?? '' ), $vb ) ? $vb[0] : '',
 						'monday_visits_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_visits_board'] ?? '' ), $vs ) ? $vs[0] : '',
 						'monday_donations_board' => preg_match( '/\d{5,}/', (string) ( $raw['monday_donations_board'] ?? '' ), $db ) ? $db[0] : '',
+						'people_group'      => sanitize_text_field( $raw['people_group'] ?? '' ),
+						// Minutes, 0 to 60; empty is the default 10.
+						'gift_grace'        => '' === trim( (string) ( $raw['gift_grace'] ?? '' ) ) ? '10' : (string) max( 0, min( 60, (int) $raw['gift_grace'] ) ),
 						'visits_url'        => leadkit_clean_visits_url( $raw['visits_url'] ?? '' ),
 						'visits_secret'     => leadkit_keep_secret( $raw['visits_secret'] ?? '', 'visits_secret' ),
+						'background_minutes' => '5' === (string) ( $raw['background_minutes'] ?? '' ) ? '5' : '15',
 						// Paths, each with slashes both ends: "/help/". A lone "/" is everything.
 						'untracked_paths'   => implode( ', ', array_unique( array_filter( array_map( function ( $p ) {
 							$p = preg_replace( '#[^a-z0-9/._~%-]#', '', (string) wp_parse_url( strtolower( trim( (string) $p ) ), PHP_URL_PATH ) );
@@ -193,11 +197,14 @@ function leadkit_render_settings_page() {
 		'monday_token'      => array( __( 'monday.com API token', 'leadkit' ), __( 'From monday.com: your avatar → Developers → My access tokens. Used only on the server, to add return visits to the matching monday.com item. Never shown again once saved; leave empty to keep it, a single - clears it. Or define LEADKIT_MONDAY_TOKEN in wp-config.php.', 'leadkit' ), 'secret' ),
 		'monday_boards'     => array( __( 'monday.com boards', 'leadkit' ), __( 'Board ids (the number in the board URL), comma-separated. Each needs a visitor_id column, which a form tag named visitor_id creates. When a returning visitor matches an item, LeadKit fills "Return visits log", "Last seen" and "Return visits" columns (creating them the first time) and posts an update on the item once a day. Set the form to redirect after submitting to a page on this site with ?leadkit_lead=<form name> so LeadKit knows they submitted.', 'leadkit' ) ),
 		'monday_people_board' => array( __( 'monday.com People board', 'leadkit' ), __( 'Optional. A board id for one row per person, matched by email. Every submission is connected to its person, the person\'s columns are rolled up (visitor ids, submissions, engagement, first and latest source, first and last seen), and return visits are added to the person instead of each submission. Columns are created the first time, so an empty board is fine.', 'leadkit' ) ),
-		'monday_visitors_board' => array( __( 'monday.com Visitors board', 'leadkit' ), __( 'Optional. A board id for one row per browser, keyed by a visitorid column — the same id the forms send and every donation link carries. Each Donate click and form submission updates the row: First and Last seen, Visits, First and Latest source, First and Latest referrer, Donate clicks and the Journey log, and connects it to the submission (Form submissions) and the person (Person, with a People board). Missing columns are created. Gifts connect to the row from the Donations board, by an automation matching visitorid.', 'leadkit' ) ),
+		'monday_visitors_board' => array( __( 'monday.com Visitors board', 'leadkit' ), __( 'Optional. A board id for one row per browser, keyed by a visitorid column — the same id the forms send and every donation link carries. Each Donate click and form submission updates the row: First and Last seen, Visits, First and Latest source, First and Latest referrer, Donate clicks and the Journey log, and connects it to the submission (Form submissions) and the person (Person, with a People board). Missing columns are created. With a Donations board, LeadKit connects each gift to its row by visitorid.', 'leadkit' ) ),
 		'monday_visits_board' => array( __( 'monday.com Visits board', 'leadkit' ), __( 'Optional, with a Visitors board. A board id for one row per visit — a run of pages with no gap over 30 minutes — connected to its row on the Visitors board: Started, Referrer (the site that sent the visit), Source, Landing page, Pages, Seconds on site, Donate clicks, Forms and the Journey. Written with the Visitors row, earlier visits included. Missing columns are created.', 'leadkit' ) ),
-		'monday_donations_board' => array( __( 'monday.com Donations board', 'leadkit' ), __( 'Optional, with a People board. The board gifts arrive on (from Zapier). Every 15 minutes LeadKit links the newest gifts the way monday.com automations cannot: it finds or creates the donor on People by Donor email when nothing connected them, gives the gift\'s browser on the Visitors board the same person, and fills the Open person links. Its Person column must be a two-way connection for People\'s Total given to count gifts.', 'leadkit' ) ),
-		'visits_url'        => array( __( 'Visits Worker URL', 'leadkit' ), __( 'Optional, with a Visitors board. The Cloudflare Worker that keeps every browser\'s visits in D1, e.g. https://visits.example.org. The tracker posts every visit straight to it, anonymous visitors included, so none of that traffic or data touches WordPress. A browser\'s visits stay there until it reaches a goal: by default a Donate click or a form (the Worker\'s WARM_RULES setting can add returning visitors or campaign arrivals). Every 15 minutes LeadKit fetches those browsers and writes them to the Visitors and Visits boards with their whole history, earlier anonymous visits included. Empty turns it off. Make sure the privacy policy says the site keeps visit history per browser.', 'leadkit' ) ),
+		'monday_donations_board' => array( __( 'monday.com Donations board', 'leadkit' ), __( 'Optional, with a People board. The board gifts arrive on (from Zapier, which then only has to create the gift). Each background run LeadKit links the newest gifts the way monday.com automations cannot: it unpacks "Packed source (raw)" into the gift\'s empty utm_medium, utm_source, utm_campaign, utm_content, utm_term and visitorid columns (those the board has; none is created), connects the gift\'s Visitor by visitorid, finds or creates the donor on People by Donor email when nothing connected them — copying each "Donor …" column to the person\'s column of the same name, such as Donor phone to Phone and Donor city to City — gives the gift\'s browser on the Visitors board the same person, and fills the Open person links. Its Person column must be a two-way connection for People\'s Total given to count gifts.', 'leadkit' ) ),
+		'people_group'      => array( __( 'Group for new people', 'leadkit' ), __( 'Optional, with a Donations board. The group on the People board where a donor LeadKit makes goes: its title as the board shows it, or its id. Empty means the board\'s top group. If the board has no group by that name, LeadKit makes no donor until it does, rather than put them in the wrong group; their gifts are linked once it is fixed.', 'leadkit' ) ),
+		'gift_grace'        => array( __( 'Wait before making a donor (minutes)', 'leadkit' ), __( 'How long a gift with no Person is left to Zapier and monday.com automations before LeadKit finds or makes the donor; two of them making the same donor at once would make two people. 10 by default. 2 is enough once Zapier only creates the gift.', 'leadkit' ) ),
+		'visits_url'        => array( __( 'Visits Worker URL', 'leadkit' ), __( 'Optional, with a Visitors board. The Cloudflare Worker that keeps every browser\'s visits in D1, e.g. https://visits.example.org. The tracker posts every visit straight to it, anonymous visitors included, so none of that traffic or data touches WordPress. A browser\'s visits stay there until it reaches a goal: by default a Donate click or a form (the Worker\'s WARM_RULES setting can add returning visitors or campaign arrivals). Each background run LeadKit fetches those browsers and writes them to the Visitors and Visits boards with their whole history, earlier anonymous visits included. Empty turns it off. Make sure the privacy policy says the site keeps visit history per browser.', 'leadkit' ) ),
 		'visits_secret'     => array( __( 'Visits Worker secret', 'leadkit' ), __( 'The Worker\'s SYNC_SECRET. Better in wp-config.php as LEADKIT_VISITS_SECRET, which takes precedence. Never shown again once saved; leave empty to keep it, a single - clears it.', 'leadkit' ), 'secret' ),
+		'background_minutes' => array( __( 'Background runs', 'leadkit' ), __( 'How often the gift linker and the warm-browser sender run. WordPress starts them on the first page visit after each is due, so on a quiet site they run late; a real cron calling wp-cron.php at the same interval keeps them on time. Every 5 minutes makes about three times as many monday.com API calls.', 'leadkit' ), 'select', array( '15' => __( 'Every 15 minutes', 'leadkit' ), '5' => __( 'Every 5 minutes', 'leadkit' ) ) ),
 		'untracked_paths'   => array( __( 'Untracked pages', 'leadkit' ), __( 'Paths where nothing is tracked and nothing is sent — pages someone at risk might use, like /help/. Comma-separated; each covers the pages under it (/help/ covers /help/hotline/ but not /helpful/). The tracker is not loaded there at all, and those pages are dropped from anything a browser recorded there before.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);
@@ -218,6 +225,9 @@ function leadkit_render_settings_page() {
 	$leadkit_have_from      = '' !== trim( (string) $opts['from_email'] );
 	$leadkit_yes            = '<span style="color:#00794b;font-weight:600">' . esc_html__( 'detected', 'leadkit' ) . '</span>';
 	$leadkit_no             = '<span style="color:#b32d2e;font-weight:600">' . esc_html__( 'not set', 'leadkit' ) . '</span>';
+	// A group for new people that is not on the People board stops LeadKit
+	// making donors, so the field says so.
+	$leadkit_group_missing = '' !== trim( (string) $opts['people_group'] ) && leadkit_gifts_enabled() && null === leadkit_gift_people_group( leadkit_monday_people_board() );
 	?>
 	<div class="wrap">
 		<h1><?= esc_html__( 'LeadKit', 'leadkit' ) ?></h1>
@@ -297,10 +307,19 @@ define( 'LEADKIT_TURNSTILE_SECRET', '0x4AAA…' );</pre>
 							<input name="leadkit_options[<?= esc_attr( $key ) ?>]" type="checkbox" id="leadkit-<?= esc_attr( $key ) ?>" value="1" <?php checked( '1', $opts[ $key ] ); ?>>
 							<?= esc_html__( 'Enabled', 'leadkit' ) ?>
 						</label>
+						<?php elseif ( 'select' === ( $meta[2] ?? 'text' ) ) : ?>
+						<select name="leadkit_options[<?= esc_attr( $key ) ?>]" id="leadkit-<?= esc_attr( $key ) ?>">
+							<?php foreach ( $meta[3] as $value => $label ) : ?>
+							<option value="<?= esc_attr( $value ) ?>" <?php selected( (string) $value, (string) $opts[ $key ] ); ?>><?= esc_html( $label ) ?></option>
+							<?php endforeach; ?>
+						</select>
 						<?php else : ?>
 						<input name="leadkit_options[<?= esc_attr( $key ) ?>]" type="text" id="leadkit-<?= esc_attr( $key ) ?>" value="<?= esc_attr( $opts[ $key ] ) ?>" class="regular-text">
 						<?php endif; ?>
 						<p class="description"><?= esc_html( $meta[1] ) ?></p>
+						<?php if ( 'people_group' === $key && $leadkit_group_missing ) : ?>
+						<p class="description" style="color:#b32d2e;font-weight:600"><?= esc_html__( 'Not found on the People board, or monday.com could not be reached: LeadKit makes no donor until it is.', 'leadkit' ) ?></p>
+						<?php endif; ?>
 					</td>
 				</tr>
 				<?php endforeach; ?>

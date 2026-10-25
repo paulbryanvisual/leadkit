@@ -446,6 +446,9 @@ function leadkit_monday( $query, $variables = array(), $partial = false ) {
 		return null;
 	}
 	$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+	if ( leadkit_monday_column_gone( $json ) ) {
+		leadkit_monday_forget_columns(); // Found again by title next time.
+	}
 	if ( $partial && is_array( $json ) && ! empty( $json['errors'] ) && is_array( $json['data'] ?? null ) ) {
 		update_option( 'leadkit_last_monday_error', (string) ( $json['errors'][0]['message'] ?? 'partial failure' ), false );
 		return $json['data'];
@@ -457,6 +460,28 @@ function leadkit_monday( $query, $variables = array(), $partial = false ) {
 	}
 	delete_option( 'leadkit_last_monday_error' );
 	return $json['data'];
+}
+
+/**
+ * Whether monday.com refused a request because a column id no longer exists
+ * (InvalidColumnIdException) — a column deleted since LeadKit cached its id.
+ *
+ * @param mixed $json Decoded response.
+ * @return bool
+ */
+function leadkit_monday_column_gone( $json ) {
+	if ( ! is_array( $json ) ) {
+		return false;
+	}
+	// The error list, or the older API's single error at the top level.
+	foreach ( array_merge( array( $json ), (array) ( $json['errors'] ?? array() ) ) as $e ) {
+		$code = is_array( $e ) ? (string) ( $e['extensions']['code'] ?? $e['error_code'] ?? '' ) : '';
+		$msg  = is_array( $e ) ? (string) ( $e['message'] ?? $e['error_message'] ?? '' ) : '';
+		if ( 'InvalidColumnIdException' === $code || preg_match( '/column id doesn.?t exist/i', $msg ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -498,7 +523,7 @@ function leadkit_monday_find_items( $board, $visitor, &$state ) {
 			$items[] = (string) $it['id'];
 		}
 	}
-	$pcols = get_transient( 'leadkit_monday_pcols_' . $board );
+	$pcols = get_transient( leadkit_monday_columns_key( 'pcols', $board ) );
 	if ( is_array( $pcols ) && ! empty( $pcols['ids'] ) ) {
 		$data = leadkit_monday(
 			'query ($b: [ID!], $c: String!, $v: CompareValue!) { boards(ids: $b) { items_page(limit: 25, query_params: {rules: [{column_id: $c, compare_value: $v, operator: contains_text}]}) { items { id } } } }',
@@ -521,7 +546,7 @@ function leadkit_monday_find_items( $board, $visitor, &$state ) {
  * @return array|null { visitor, log, seen, count }
  */
 function leadkit_monday_columns( $board ) {
-	$key    = 'leadkit_monday_cols_' . $board;
+	$key    = leadkit_monday_columns_key( 'cols', $board );
 	$cached = get_transient( $key );
 	if ( is_array( $cached ) && ! empty( $cached['log'] ) ) {
 		return $cached;
