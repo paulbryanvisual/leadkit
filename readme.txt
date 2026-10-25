@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.8.1
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -121,8 +121,10 @@ campaign credited when the visitor came back from the donation host).
   empty utm_ and visitorid columns the board has (none is created),
   connects the gift's Visitor by visitorid (retried for a week while the
   browser's row is not written yet), finds or creates the donor by email —
-  copying each "Donor X" column to People's "X" column, text to text and a
-  phone column's value, as stored, to a phone column — gives the gift's
+  named from the gift's "Donor name" column when it has one (else the
+  gift's own name), and copying each other "Donor X" column to People's "X"
+  column, text to text and a phone column's value, as stored, to a phone
+  column — gives the gift's
   browser the same person, and fills Open person links. Its Person column
   must be two-way for People's Total given.
 * Group for new people — the People group a donor LeadKit makes goes in, by
@@ -151,6 +153,12 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.8.1 =
+* A person the gift linker makes is named from the gift's "Donor name"
+  column when the board has one, so gifts can be named the way gift
+  history is ("Oct 24, 2026 – $50 – Jane Doe") without that becoming the
+  person's name.
 
 = 1.8.0 =
 * Gift linker does the general linking, so Zapier only has to create the

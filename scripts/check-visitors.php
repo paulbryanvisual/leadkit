@@ -567,6 +567,7 @@ function lk_gift_boards_full() {
 		'text_dst'   => array( 'Donor street', 'text' ),
 		'text_dcity' => array( 'Donor city', 'text' ),
 		'text_dfax'  => array( 'Donor fax', 'text' ), // Nothing on People to copy it to.
+		'text_dname' => array( 'Donor name', 'text' ),
 	);
 	LkMonday::$boards[ PEOPLE ]['cols'] += array(
 		'phone_pph'  => array( 'Phone', 'phone' ),
@@ -649,6 +650,14 @@ lk_gift_boards_full();
 lk_gift( 'Noel Grant', lk_email( 'noel@example.org' ) + array( 'phone_dph' => array( 'phone' => '', 'countryShortName' => 'US' ) ) );
 leadkit_link_gifts();
 lk_eq( array_keys( lk_person_item( 'Noel Grant' )['values'] ?? array() ), array( 'email_mm83fpfp' ), 'new donor: a Donor phone with no number is not copied' );
+
+// A gift named the way gift history is ("date – amount – donor") names the
+// new person from its Donor name, not from the gift's own name.
+lk_gift_boards_full();
+$g = lk_gift( 'Oct 25, 2026 – $5.00 – Dana Cole', lk_email( 'dana@example.org' ) + array( 'text_dname' => 'Dana Cole' ) );
+leadkit_link_gifts();
+lk_eq( array( count( lk_people_named( 'Dana Cole' ) ), count( lk_people_named( 'Oct 25, 2026 – $5.00 – Dana Cole' ) ) ), array( 1, 0 ), 'new donor: named from the gift\'s Donor name' );
+lk_eq( lk_item( GIFTS, $g )['link_mm84y7n4']['text'] ?? null, 'Dana Cole', 'new donor: and the gift\'s Open person link says so' );
 
 // A group for new people that the board does not have: nobody is put in the wrong one.
 lk_gift_boards_full();

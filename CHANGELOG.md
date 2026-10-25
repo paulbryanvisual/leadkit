@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.1
+
+- **A new person is named from the gift's "Donor name"** column when the
+  Donations board has one and it is filled. Otherwise the gift's own name
+  is used, as before. Gifts can then be named the way gift history is,
+  "Oct 24, 2026 – $50 – Jane Doe", so a person's linked gifts read as a
+  dated list, without that name becoming the person's. It is the "Donor X"
+  → "X" rule applied to People's Name. Found in a live end-to-end test: a
+  test donor came out as "LeadKit Test – $1".
+- `scripts/check-visitors.php`: two new checks. They fail on 1.8.0.
+
 ## 1.8.0
 
 The gift linker does the general linking, so a Zap only has to create the

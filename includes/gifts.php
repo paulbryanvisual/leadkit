@@ -26,8 +26,9 @@
  *   3. no Person some minutes after the gift arrived (Settings → LeadKit →
  *      Wait before making a donor, 10 by default; Zapier and the email match
  *      go first): finds the donor on People by email, or creates them — in
- *      the group set for new people, with the gift's Donor phone, street and
- *      the like copied — and sets the gift's Person (a two-way column, so the
+ *      the group set for new people, named from the gift's Donor name (else
+ *      the gift's own name), with its Donor phone, street and the like
+ *      copied — and sets the gift's Person (a two-way column, so the
  *      person's Donations and Total given follow);
  *   4. fills the gift's "Open person" link;
  *   5. a Visitor whose row has no Person yet: gives it this gift's person, and
@@ -410,9 +411,14 @@ function leadkit_link_gifts() {
 				if ( null === $group ) {
 					continue;
 				}
-				$vars = array(
+				// The person's name: the gift's "Donor name" when it has one
+				// (a gift named "Oct 24, 2026 – $50 – Jane Doe", say), else the
+				// gift's own name.
+				$named = array_search( 'name', $donor, true );
+				$name  = ( false !== $named ? trim( (string) ( $g['text'][ $named ] ?? '' ) ) : '' ) ?: $g['name'] ?: $g['email'];
+				$vars  = array(
 					'b' => $people,
-					'n' => $g['name'] ?: $g['email'],
+					'n' => $name,
 					'v' => wp_json_encode( array( $pcols['email'] => array( 'email' => $g['email'], 'text' => $g['email'] ) ) + leadkit_gift_donor_details( $g, $donor, $people ) ),
 				);
 				if ( $group ) {
@@ -426,7 +432,7 @@ function leadkit_link_gifts() {
 				if ( ! $g['person'] ) {
 					continue;
 				}
-				$brief = array( 'name' => $g['name'] ?: $g['email'], 'url' => (string) ( $made['create_item']['url'] ?? '' ) );
+				$brief = array( 'name' => $name, 'url' => (string) ( $made['create_item']['url'] ?? '' ) );
 				++$out['people'];
 			}
 			$values = array( $cols['person'] => array( 'item_ids' => array( (int) $g['person'] ) ) );
