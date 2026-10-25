@@ -122,9 +122,9 @@ campaign credited when the visitor came back from the donation host).
   connects the gift's Visitor by visitorid (retried for a week while the
   browser's row is not written yet), finds or creates the donor by email —
   copying each "Donor X" column to People's "X" column, text to text and a
-  phone with its country to a phone column — gives the gift's browser the
-  same person, and fills Open person links. Its Person column must be
-  two-way for People's Total given.
+  phone column's value, as stored, to a phone column — gives the gift's
+  browser the same person, and fills Open person links. Its Person column
+  must be two-way for People's Total given.
 * Group for new people — the People group a donor LeadKit makes goes in, by
   title or id. Empty = the board's top group. A name the board does not have
   stops LeadKit making donors (the settings screen says so) rather than put

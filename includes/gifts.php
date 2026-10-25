@@ -193,7 +193,7 @@ function leadkit_gift_columns( $board ) {
 /**
  * A gift's "Donor X" columns as a new person's "X" columns — Donor phone to
  * Phone, Donor city to City — where the People board has a column of that
- * title: text into a text column, a phone number into a phone column.
+ * title: text into a text column, a phone column's value into a phone column.
  *
  * @param array  $g      The gift, with its column texts and values.
  * @param array  $donor  Gift column id => title without "donor ".
@@ -214,11 +214,13 @@ function leadkit_gift_donor_details( $g, $donor, $people ) {
 		} elseif ( 'long_text' === $col['type'] ) {
 			$out[ $col['id'] ] = array( 'text' => mb_substr( $text, 0, 20000 ) );
 		} elseif ( 'phone' === $col['type'] ) {
-			// Only a phone column's own value, which carries its country: a
-			// number monday.com refused would stop the person being made.
+			// A phone column's own value, as monday.com stored it — with its
+			// country or without (monday.com takes both). Nothing else: a
+			// number made up from text could be refused, and stop the person
+			// being made.
 			$raw = json_decode( (string) ( $g['value'][ $id ] ?? '' ), true );
-			if ( ! empty( $raw['phone'] ) && ! empty( $raw['countryShortName'] ) ) {
-				$out[ $col['id'] ] = array( 'phone' => (string) $raw['phone'], 'countryShortName' => (string) $raw['countryShortName'] );
+			if ( ! empty( $raw['phone'] ) ) {
+				$out[ $col['id'] ] = array( 'phone' => (string) $raw['phone'] ) + ( empty( $raw['countryShortName'] ) ? array() : array( 'countryShortName' => (string) $raw['countryShortName'] ) );
 			}
 		}
 	}

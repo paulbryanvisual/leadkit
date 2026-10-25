@@ -628,7 +628,7 @@ lk_eq( $p['group'] ?? null, 'group_new', 'new donor: made in the group set by it
 lk_eq( array( $p['values']['phone_pph'] ?? null, $p['values']['text_pst'] ?? null, $p['values']['text_pcity'] ?? null ), array( array( 'phone' => '+12025550169', 'countryShortName' => 'US' ), '12 Oak St', 'Dallas' ), 'new donor: Donor phone, street and city copied to Phone, Street and City' );
 lk_eq( array_keys( $p['values'] ?? array() ), array( 'email_mm83fpfp', 'phone_pph', 'text_pst', 'text_pcity' ), 'new donor: and nothing else — Donor fax has no column to go to' );
 $s = lk_person_item( 'Sam Okafor' );
-lk_eq( array( isset( $s['values']['phone_pph'] ), $s['values']['email_mm83fpfp']['email'] ?? null ), array( false, 'sam@example.org' ), 'new donor: a phone with no country is not copied, and does not stop the person being made' );
+lk_eq( array( $s['values']['phone_pph'] ?? null, $s['values']['email_mm83fpfp']['email'] ?? null ), array( array( 'phone' => '2025550123' ), 'sam@example.org' ), 'new donor: a phone with no country is copied as monday.com stored it (it takes one; checked live)' );
 $done = get_option( 'leadkit_gifts_done' );
 lk_eq( array( isset( $done[ $g_pack ] ), isset( $done[ $g_later ] ) ), array( true, false ), 'visitor: a gift whose Visitors row is not written yet keeps waiting' );
 
@@ -643,6 +643,12 @@ lk_ok( isset( get_option( 'leadkit_gifts_done' )[ $g_later ] ), 'visitor: then t
 $g_lost = lk_gift( 'Grace Liu', array( 'board_relation_mm83z7sa' => array( 'item_ids' => array( (int) $grace ) ), 'text_mm84wm8e' => 'e3e3e3e3-never' ), 8 * DAY_IN_SECONDS );
 leadkit_link_gifts();
 lk_ok( isset( get_option( 'leadkit_gifts_done' )[ $g_lost ] ), 'visitor: a gift whose Visitors row never comes is let go after a week' );
+
+// A Donor phone with no number in it is not copied.
+lk_gift_boards_full();
+lk_gift( 'Noel Grant', lk_email( 'noel@example.org' ) + array( 'phone_dph' => array( 'phone' => '', 'countryShortName' => 'US' ) ) );
+leadkit_link_gifts();
+lk_eq( array_keys( lk_person_item( 'Noel Grant' )['values'] ?? array() ), array( 'email_mm83fpfp' ), 'new donor: a Donor phone with no number is not copied' );
 
 // A group for new people that the board does not have: nobody is put in the wrong one.
 lk_gift_boards_full();

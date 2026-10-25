@@ -22,9 +22,11 @@ gift — one Zapier task instead of about five.
   does not have stops LeadKit making donors, and the settings screen says
   so, rather than put them in the wrong group; their gifts are linked once
   it is fixed. Each "Donor X" column on the gift is copied to People's "X"
-  column where both exist: text to text, and a phone to a phone column only
-  with its country, so a number monday.com would refuse cannot stop the
-  person being made.
+  column where both exist: text to text, and a phone column's value to a
+  phone column as monday.com stored it, with its country or without
+  (monday.com accepts both; checked live). A phone is never made up from
+  text, so a number monday.com would refuse cannot stop the person being
+  made.
 - **Wait before making a donor (minutes)**: the grace a gift with no Person
   gets before LeadKit finds or makes the donor, 10 by default as before
   (`LEADKIT_GIFT_GRACE`), 0–60. 2 is enough once Zapier only creates the
