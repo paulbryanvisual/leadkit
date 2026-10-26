@@ -343,6 +343,18 @@ define( 'LEADKIT_TURNSTILE_SECRET', '0x4AAA…' );</pre>
 			) ?>
 		</p>
 		<?php endif; ?>
+		<?php
+		// What donor keys from email links did lately (donor-keys.php).
+		$leadkit_dk_log = array_slice( array_reverse( (array) get_option( 'leadkit_dk_log', array() ) ), 0, 5 );
+		if ( $leadkit_dk_log ) :
+			?>
+		<p class="description"><?= esc_html__( 'Donor keys from email links, latest first:', 'leadkit' ) ?></p>
+		<ul class="description" style="margin-top:0">
+			<?php foreach ( $leadkit_dk_log as $leadkit_note ) : ?>
+			<li><?= esc_html( wp_date( 'Y-m-d H:i', strtotime( (string) ( $leadkit_note['time'] ?? '' ) ) ) . ' — ' . ( $leadkit_note['key'] ?? '' ) . ': ' . ( $leadkit_note['what'] ?? '' ) ) ?></li>
+			<?php endforeach; ?>
+		</ul>
+		<?php endif; ?>
 		<p>
 			<?= esc_html__( 'Render the form with the [leadkit_form] shortcode, or from a theme with leadkit_form( ["class_prefix" => "your-prefix"] ). The endpoint payload contract is documented in the plugin’s readme.txt.', 'leadkit' ) ?>
 		</p>
