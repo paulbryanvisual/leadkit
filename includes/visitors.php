@@ -223,7 +223,8 @@ function leadkit_visitor_row_key( $visitor ) {
  * @param array  $data    analyticsData, or a Visitors post: started_at, referrer,
  *                        utm, utm_first, utm_touches, page_views, donate_clicks,
  *                        lead_forms, donation_returns (or events).
- * @param array  $link    { item?, person? } to connect.
+ * @param array  $link    { item?, person? } to connect; dk?: a donor key
+ *                        matched in monday.com ("b-22758-7cf7").
  * @return string Row item id, '' when nothing could be written.
  */
 function leadkit_visitor_upsert( $visitor, $data, $link = array() ) {
@@ -305,6 +306,9 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		'person'  => '',      // Person still to connect.
 		'linked'  => '',      // Person already connected.
 		'brief'   => array(), // That person's name and address, for Open person links.
+		'dk'      => '',      // The latest donor key matched in monday.com: "b-22758-7cf7".
+		'dk_done' => '',      // The key last seen through (donor-keys.php).
+		'dk_miss' => 0,       // When that key last matched no donor.
 	);
 	$st = leadkit_visitor_merge( $st, $data );
 	if ( ! empty( $link['item'] ) ) {
@@ -312,6 +316,9 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 	}
 	if ( ! empty( $link['person'] ) ) {
 		$st['person'] = (string) $link['person'];
+	}
+	if ( ! empty( $link['dk'] ) ) {
+		$st['dk'] = (string) $link['dk'];
 	}
 
 	$cols = leadkit_visitor_columns( $board );
@@ -415,6 +422,13 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 	}
 	if ( $st['person'] === $st['linked'] ) {
 		$st['person'] = '';
+	}
+
+	// A donor key from an email link: the donor, if this browser has no one
+	// else (donor-keys.php). A key that matched no one is tried again daily.
+	$dk_due = $st['dk'] !== $st['dk_done'] || ( $st['dk_miss'] && time() - (int) $st['dk_miss'] > DAY_IN_SECONDS );
+	if ( $st['dk'] && $dk_due && ! empty( $cols['person'] ) ) {
+		leadkit_donor_key_link( $board, $row, $visitor, $cols, $st );
 	}
 
 	// A row per visit on the Visits board, connected to this one — after the

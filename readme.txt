@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.8.1
+Stable tag: 1.9.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -74,11 +74,16 @@ gets no URL otherwise). The same body as leadkit/v1/visitor, sent as
 text/plain (no CORS preflight) and not queued, since the next post carries
 everything. The Worker keeps it in Cloudflare D1. WordPress calls the
 Worker's private routes with `Authorization: Bearer <LEADKIT_VISITS_SECRET>`:
-  GET /warm?limit=25   { browsers: [ { visitor, hash, story } ] }, the warm
-                       browsers whose story changed
+  GET /warm?limit=25   { browsers: [ { visitor, hash, story, dk? } ] }, the
+                       warm browsers whose story changed; dk { prefix, id,
+                       key, first_click_at } only on a browser with a
+                       matched donor key. &visitor=<id>: that browser alone,
+                       if pending
   POST /sent           { sent: [ { visitor, hash } ] }, cleared only where
                        the hash still matches
   POST /known          { visitors: [ id ] }, a browser now on the Visitors board
+  POST /donor          { visitor, dk }, a donor key WordPress matched: kept
+                       on the browser's row, which is known from then on
   GET /stats           { browsers, warm, pending, sent }
 Which browsers are warm is the Worker's WARM_RULES setting: by default
 donate, form and known (a browser on the Visitors board); returning and
@@ -94,6 +99,35 @@ source (raw)" column fills its empty utm_medium … utm_term and visitorid
 columns, so the Zap that creates the gift needs no Code step.
 scripts/zapier-code-step.js is that Code by Zapier step, for a Zap that
 still wants one.
+
+`leadkit/v1/donor-key` — JSON POST { visitor_id, dk } from the tracker when
+an email link brought a donor key, once the Visits Worker has that page's
+visit; when both a Visits Worker and a Visitors board are set. Answers 200
+before it looks the key up (and the same whether or not it is anyone's),
+400 for a bad id or key, 413 over 4 KB, 429 over 10 an IP in ten minutes;
+each browser is run at most once a minute (a newer key waits for the next
+background run). The tracker resends it on the next page load until it gets
+an answer other than 5xx or 429.
+
+Donor keys — an email link can carry ?dk=<prefix>-<id>-<code>, lowercase:
+b-22758-7cf7 (a CRM account) or m-13365350571-629a (a People item). The
+whole key is the person's "Donor key" on the People board, which the
+board's "Tracked link" formula puts on the link; LeadKit only reads that
+column. No secret: a key is good when it is exactly one person's Donor key,
+so a changed number matches no one. The tracker takes dk out of the address
+bar on landing (every other parameter kept), keeps the latest well-formed
+one with the visitor id, and sends it only to leadkit/v1/donor-key — never
+to the Worker, on a donation link or in a packed source. WordPress looks it
+up. No one's (or two people's): noted, and kept and sent nowhere. Someone's:
+POST /donor to the Worker, then that browser is written at once, earlier
+visits included, and: the Visitors row's Person and Open person become the
+donor, never over a different person already there; and the donor's
+"Clicked email link" is set to today if it is empty. No other People column
+is written and none is created; the leadkit/donor_key_columns filter
+changes the two titles. A key that cannot be looked up (monday.com or the
+Worker not answering) waits in the leadkit_dk_pending option for the next
+background run, for up to a week. The last 50 notes are in the
+leadkit_dk_log option and the last 5 on the settings screen.
 
 A campaign touch (`utm`, `utm_first`, each of `utm_touches`) is
   { source, medium, campaign, content, term, click_id?, landing, time }
@@ -153,6 +187,17 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.9.0 =
+* Donor keys: an email link with ?dk=<the person's Donor key> ties the
+  browser to the donor. The tracker takes the key out of the address bar
+  and posts it to the new leadkit/v1/donor-key route; WordPress matches the
+  whole key against the People board's Donor key column (no secret). On a
+  match the Visits Worker keeps it (POST /donor) and the browser is written
+  to monday.com at once with every earlier visit, its Person and Open
+  person set to the donor unless someone else is there already, and the
+  donor's "Clicked email link" set if empty. Needs Visits Worker 2026-10-26
+  or later (migration 0002, POST /donor).
 
 = 1.8.1 =
 * A person the gift linker makes is named from the gift's "Donor name"

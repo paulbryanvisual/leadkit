@@ -131,9 +131,11 @@ function leadkit_visits_call( $method, $path, $body = null, $wait = true, $timeo
 /**
  * Each background run: send the warm browsers whose story changed.
  *
+ * @param string $only One visitor id: that browser alone, if it is pending
+ *                     (a donor key just arrived: donor-keys.php).
  * @return int Browsers sent.
  */
-function leadkit_send_warm_browsers() {
+function leadkit_send_warm_browsers( $only = '' ) {
 	if ( ! leadkit_browsers_enabled() || ! leadkit_visitors_enabled() ) {
 		return 0;
 	}
@@ -144,7 +146,11 @@ function leadkit_send_warm_browsers() {
 	 * @param int $max Browsers.
 	 */
 	$max  = max( 1, min( 100, (int) apply_filters( 'leadkit/browsers_per_run', LEADKIT_BROWSERS_PER_RUN ) ) );
-	$warm = leadkit_visits_call( 'GET', '/warm?limit=' . $max );
+	$only = leadkit_clean_visitor_id( (string) $only );
+	if ( ! $only ) {
+		leadkit_donor_keys_run(); // Keys still to look up go to the Worker first, so they come back below.
+	}
+	$warm = leadkit_visits_call( 'GET', $only ? '/warm?limit=1&visitor=' . rawurlencode( $only ) : '/warm?limit=' . $max );
 	if ( ! $warm ) {
 		return 0;
 	}
@@ -153,13 +159,15 @@ function leadkit_send_warm_browsers() {
 	foreach ( array_slice( (array) ( $warm['browsers'] ?? array() ), 0, $max ) as $b ) {
 		$visitor = leadkit_clean_visitor_id( $b['visitor'] ?? '' );
 		$story   = is_array( $b['story'] ?? null ) ? $b['story'] : null;
-		if ( ! $visitor || ! $story ) {
+		if ( ! $visitor || ! $story || ( $only && $visitor !== $only ) ) {
 			continue;
 		}
 		// The Worker is trusted for what it decides, not for what it stores:
 		// the story came from a browser, so it is cleaned like any other post.
+		// A donor key it sends is one WordPress matched (donor-keys.php).
 		leadkit_use_visitor_tz( (string) ( $story['timezone'] ?? '' ) );
-		$row = leadkit_visitor_upsert( $visitor, $story );
+		$dk  = leadkit_clean_donor_key( $b['dk'] ?? null );
+		$row = leadkit_visitor_upsert( $visitor, $story, $dk ? array( 'dk' => $dk ) : array() );
 		if ( '' === $row ) {
 			continue; // monday.com did not take it: still pending, tried next run.
 		}

@@ -297,6 +297,9 @@ class LkMonday {
 		if ( isset( $val['url'] ) ) {
 			return ( $val['text'] ?? '' ) . ' - ' . $val['url'];
 		}
+		if ( isset( $val['date'] ) ) {
+			return (string) $val['date'];
+		}
 		if ( isset( $val['text'] ) ) {
 			return (string) $val['text'];
 		}
@@ -394,6 +397,16 @@ class LkMonday {
 			}
 			return array( 'data' => array( 'boards' => array( array( 'items_page' => array( 'items' => $out ) ) ) ) );
 		}
+		if ( false !== strpos( $q, 'items(ids: $i) { id name url board { id } }' ) ) {
+			$out = array();
+			foreach ( $v['i'] as $id ) {
+				$hit = self::find_item( $id );
+				if ( $hit ) {
+					$out[] = array( 'id' => (string) $id, 'name' => $hit[1]['name'], 'url' => self::url( $hit[0], $id ), 'board' => array( 'id' => $hit[0] ) );
+				}
+			}
+			return array( 'data' => array( 'items' => $out ) );
+		}
 		if ( false !== strpos( $q, 'items(ids: $i) { id name url }' ) ) {
 			$out = array();
 			foreach ( $v['i'] as $id ) {
@@ -471,8 +484,12 @@ class LkMonday {
 			foreach ( $v['i'] as $id ) {
 				$hit = self::find_item( $id );
 				if ( $hit ) {
-					$val   = $hit[1]['values'][ $v['c'][0] ] ?? array();
-					$out[] = array( 'id' => (string) $id, 'column_values' => array( array( 'id' => $v['c'][0], 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) ) ) );
+					$cvs = array();
+					foreach ( (array) $v['c'] as $c ) {
+						$val   = $hit[1]['values'][ $c ] ?? null;
+						$cvs[] = array( 'id' => $c, 'text' => null === $val ? '' : self::text( $val ), 'linked_item_ids' => array_map( 'strval', $val['item_ids'] ?? array() ) );
+					}
+					$out[] = array( 'id' => (string) $id, 'column_values' => $cvs );
 				}
 			}
 			return array( 'data' => array( 'items' => $out ) );
