@@ -245,8 +245,9 @@ function leadkit_donor_key_link( $board, $row, $visitor, $cols, &$st ) {
 		$st['dk_miss'] = time();
 		return;
 	}
-	$st['dk_miss'] = 0;
-	$person        = (string) $found['id'];
+	$st['dk_miss']   = 0;
+	$person          = (string) $found['id'];
+	$st['dk_person'] = $person;
 	$brief         = $found['brief'];
 
 	// The Visitors row: the donor, unless it already has someone else.

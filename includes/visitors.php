@@ -309,6 +309,8 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		'dk'      => '',      // The latest donor key matched in monday.com: "b-22758-7cf7".
 		'dk_done' => '',      // The key last seen through (donor-keys.php).
 		'dk_miss' => 0,       // When that key last matched no donor.
+		'dk_person' => '',    // The People item that key named.
+		'eids'    => array(), // Email ids seen on this browser's touches (email-clicks.php).
 	);
 	$st = leadkit_visitor_merge( $st, $data );
 	if ( ! empty( $link['item'] ) ) {
@@ -429,6 +431,12 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 	$dk_due = $st['dk'] !== $st['dk_done'] || ( $st['dk_miss'] && time() - (int) $st['dk_miss'] > DAY_IN_SECONDS );
 	if ( $st['dk'] && $dk_due && ! empty( $cols['person'] ) ) {
 		leadkit_donor_key_link( $board, $row, $visitor, $cols, $st );
+	}
+
+	// An officer email's id on a campaign touch (utm_term e20261026-104312): that
+	// email's Emailed subitem gets its Clicked date (email-clicks.php).
+	if ( leadkit_email_clicks_queue( $visitor, $st ) ) {
+		leadkit_email_clicks_run();
 	}
 
 	// A row per visit on the Visits board, connected to this one — after the

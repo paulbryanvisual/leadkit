@@ -149,6 +149,7 @@ function leadkit_send_warm_browsers( $only = '' ) {
 	$only = leadkit_clean_visitor_id( (string) $only );
 	if ( ! $only ) {
 		leadkit_donor_keys_run(); // Keys still to look up go to the Worker first, so they come back below.
+		leadkit_email_clicks_run(); // Email clicks whose Emailed subitem was not there yet.
 	}
 	$warm = leadkit_visits_call( 'GET', $only ? '/warm?limit=1&visitor=' . rawurlencode( $only ) : '/warm?limit=' . $max );
 	if ( ! $warm ) {
