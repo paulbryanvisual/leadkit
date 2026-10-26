@@ -129,6 +129,19 @@ Worker not answering) waits in the leadkit_dk_pending option for the next
 background run, for up to a week. The last 50 notes are in the
 leadkit_dk_log option and the last 5 on the settings screen.
 
+Email clicks — an officer's draft script puts each email's own id on its
+link as utm_term: "e" and when the draft was made (e20261026-104312), and saves
+the same id in the "Email ID" column of the Emailed subitem it adds under the
+donor once the email is sent. When a browser's campaign touch carries such an
+id, LeadKit finds that subitem on the People board's subitems board and sets
+its "Clicked" date (the click's day, first time only). Two subitems with the
+same id (drafts made in the same second): the one under the donor the
+browser's donor key names. Not there yet: the id waits in the
+leadkit_email_clicks option and is retried each background run for three
+days. Columns are found by title and never created; the
+leadkit/email_click_columns filter changes the titles. Notes go with the donor
+keys' notes.
+
 A campaign touch (`utm`, `utm_first`, each of `utm_touches`) is
   { source, medium, campaign, content, term, click_id?, landing, time }
 `utm` is the latest touch; sessions from 1.2.x carry only source / medium /
@@ -187,6 +200,11 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.9.1 =
+* Email clicks: an officer email's id on its link (utm_term e<date>-<time>)
+  sets "Clicked" on that email's Emailed subitem, the first time the donor
+  opens it. Waits up to three days for the subitem to appear.
 
 = 1.9.0 =
 * Donor keys: an email link with ?dk=<the person's Donor key> ties the

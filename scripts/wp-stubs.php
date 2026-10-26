@@ -441,12 +441,21 @@ class LkMonday {
 				if ( in_array( self::text( $it['values'][ $v['c'] ] ?? '' ), $v['v'], true ) ) {
 					$hit = array( 'id' => (string) $id, 'name' => $it['name'], 'url' => self::url( $v['b'], $id ) );
 					if ( isset( $v['r'] ) ) {
-						$hit['column_values'] = array_map( fn( $c ) => array( 'text' => (string) ( $it['values'][ $c ] ?? '' ) ), $v['r'] );
+						$hit['column_values'] = array_map( fn( $c ) => array( 'id' => $c, 'text' => isset( $it['values'][ $c ] ) ? self::text( $it['values'][ $c ] ) : '' ), $v['r'] );
+					}
+					if ( false !== strpos( $q, 'parent_item' ) ) {
+						$hit['parent_item'] = isset( $it['parent'] ) ? array( 'id' => (string) $it['parent'] ) : null;
 					}
 					$hits[] = $hit;
 				}
 			}
 			return array( 'data' => array( 'items_page_by_column_values' => array( 'items' => $hits ) ) );
+		}
+		// A board's Subitems column: which board its subitems live on.
+		if ( false !== strpos( $q, 'columns(types: [subtasks])' ) ) {
+			$b    = (string) $v['b'][0];
+			$cols = isset( self::$boards[ $b ]['subitems_board'] ) ? array( array( 'settings_str' => json_encode( array( 'boardIds' => array( (int) self::$boards[ $b ]['subitems_board'] ) ) ) ) ) : array();
+			return array( 'data' => array( 'boards' => array( array( 'columns' => $cols ) ) ) );
 		}
 		if ( false !== strpos( $q, 'create_item' ) ) {
 			if ( ! isset( self::$boards[ (string) $v['b'] ] ) ) {

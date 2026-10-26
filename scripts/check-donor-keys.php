@@ -13,7 +13,10 @@
  * match (nothing kept, nothing sent to the Worker); a key two people share;
  * a Visitors row that already has a different person; monday.com or the
  * Worker down (the key waits for the next run, for a week); a visitor with
- * no key, written exactly as before; and the route's refusals and brakes.
+ * no key, written exactly as before; the route's refusals and brakes; and
+ * email clicks (the Emailed subitem whose Email ID is on the link gets
+ * Clicked, under the donor the key names; a click before the subitem exists
+ * waits; an earlier date is kept; given up after three days).
  *
  *   php scripts/check-donor-keys.php
  *
@@ -383,6 +386,90 @@ update_option( 'leadkit_options', array( 'visits_url' => '' ) + get_option( 'lea
 remove_all_actions( 'shutdown' );
 $res = leadkit_handle_donor_key( new WP_REST_Request( json_encode( array( 'visitor_id' => $A, 'dk' => 'b-12345-7cf7' ) ) ) );
 lk_eq( array( $res->get_status(), $res->data['off'] ?? null, has_shutdown_work(), lk_pending() ), array( 200, true, false, array() ), 'route: no Visits Worker, nothing to do, nothing kept' );
+
+// ---- 9. email clicks: the Emailed subitem whose Email ID is on the link gets Clicked ----------------
+const SB = '18435400064'; // DEMO – Subitems of People
+/** People gets a Subitems column on SB; SB's subitems: id => [ parent, email id, clicked ]. */
+function lk_subitems( $rows ) {
+	LkMonday::$boards[ PB ]['cols']['subitems_mm8c'] = array( 'Subitems', 'subtasks' );
+	LkMonday::$boards[ PB ]['subitems_board']         = SB;
+	LkMonday::board(
+		SB,
+		array(
+			'name'          => array( 'Name', 'name' ),
+			'person'        => array( 'Owner', 'people' ),
+			'text_mm8g5dqg' => array( 'Template', 'text' ),
+			'text_mm8gb54v' => array( 'Email ID', 'text' ),
+			'date_mm8gv3fh' => array( 'Clicked', 'date' ),
+		)
+	);
+	foreach ( $rows as $id => $r ) {
+		LkMonday::$boards[ SB ]['items'][ $id ] = array( 'name' => 'Emailed', 'parent' => $r[0], 'values' => array_filter( array( 'text_mm8gb54v' => $r[1], 'date_mm8gv3fh' => $r[2] ? array( 'date' => $r[2] ) : null ) ) );
+	}
+}
+function lk_clicked( $id ) {
+	return LkMonday::$boards[ SB ]['items'][ $id ]['values']['date_mm8gv3fh']['date'] ?? null;
+}
+/** A story arriving through an officer email: a campaign touch with the email id as utm_term. */
+function lk_email_story( $views, $term, $t ) {
+	return array_merge(
+		lk_story( $views ),
+		array( 'utm_touches' => array( array( 'source' => 'personal-email', 'medium' => 'email', 'campaign' => 'eoy-appeal-2026', 'content' => 'paul-lybunt', 'term' => $term, 'time' => gmdate( 'c', $t ), 'landing' => '/light-the-path-give-embed/' ) ) )
+	);
+}
+$subQueries = fn() => count( array_filter( LkMonday::$calls, fn( $c ) => false !== strpos( $c['q'], 'parent_item' ) ) );
+$tc         = time() - 3600;
+$clickDay   = ( new DateTime( '@' . $tc ) )->setTimezone( new DateTimeZone( 'America/Chicago' ) )->format( 'Y-m-d' );
+
+lk_setup();
+// Two drafts made in the same second share an id: one under Donor One (7001), one under Someone Else (7003).
+lk_subitems( array( '8101' => array( '7001', 'e20261026-104312', null ), '8102' => array( '7003', 'e20261026-104312', null ), '8103' => array( '7001', 'e20261020-090000', '2026-10-20' ) ) );
+LkWorker::put( $A, lk_email_story( array( lk_view( 'a1', '/light-the-path-give-embed/', $tc ) ), 'e20261026-104312', $tc ), array( 'prefix' => 'b', 'id' => '12345', 'key' => 'b-12345-7cf7' ) );
+leadkit_send_warm_browsers();
+lk_eq( array( lk_clicked( '8101' ), lk_clicked( '8102' ) ), array( $clickDay, null ), 'email click: Clicked set on the subitem under the donor the key names, to the click\'s day; the twin under someone else untouched' );
+lk_eq( array_slice( lk_dk_log(), -1 ), array( 'e20261026-104312 "Clicked" set on Emailed subitem 8101' ), 'email click: noted' );
+lk_eq( (array) get_option( LEADKIT_EMAIL_CLICKS, array() ), array(), 'email click: nothing left waiting' );
+lk_eq( array_keys( LkMonday::$boards[ SB ]['cols'] ), array( 'name', 'person', 'text_mm8g5dqg', 'text_mm8gb54v', 'date_mm8gv3fh' ), 'email click: no subitem column made' );
+$n = $subQueries();
+LkWorker::put( $A, lk_email_story( array( lk_view( 'a1', '/light-the-path-give-embed/', $tc ), lk_view( 'a2', '/about/', $tc + 60 ) ), 'e20261026-104312', $tc ), array( 'prefix' => 'b', 'id' => '12345', 'key' => 'b-12345-7cf7' ) );
+leadkit_send_warm_browsers();
+lk_eq( $subQueries(), $n, 'email click: a repeat visit does not look the email up again' );
+
+// A second email to the same donor, already clicked once from another browser: the date stays.
+LkWorker::put( $B, lk_email_story( array( lk_view( 'b1', '/', $tc ) ), 'e20261020-090000', $tc ), array( 'prefix' => 'b', 'id' => '12345', 'key' => 'b-12345-7cf7' ) );
+leadkit_send_warm_browsers();
+lk_eq( lk_clicked( '8103' ), '2026-10-20', 'email click: an earlier Clicked date is kept' );
+
+// The click arrives before the script has added the Emailed subitem: it waits, then is set.
+lk_setup();
+lk_subitems( array() );
+LkWorker::put( $C, lk_email_story( array( lk_view( 'c1', '/', $tc ) ), 'e20261026-120000', $tc ), array( 'prefix' => 'm', 'id' => '7002', 'key' => 'm-7002-629a' ) );
+leadkit_send_warm_browsers();
+lk_eq( array_column( (array) get_option( LEADKIT_EMAIL_CLICKS, array() ), 'id' ), array( 'e20261026-120000' ), 'email click before the subitem exists: waits' );
+LkMonday::$boards[ SB ]['items']['8201'] = array( 'name' => 'Emailed', 'parent' => '7002', 'values' => array( 'text_mm8gb54v' => 'e20261026-120000' ) );
+leadkit_send_warm_browsers(); // The next background run.
+lk_eq( array( lk_clicked( '8201' ), (array) get_option( LEADKIT_EMAIL_CLICKS, array() ) ), array( $clickDay, array() ), 'email click: set on the next run once the subitem is there' );
+
+// Two subitems share the id and no donor key says whose: noted, neither set.
+lk_setup();
+lk_subitems( array( '8301' => array( '7001', 'e20261026-104312', null ), '8302' => array( '7003', 'e20261026-104312', null ) ) );
+LkWorker::put( $D, lk_email_story( array( lk_view( 'd1', '/', $tc ) ), 'e20261026-104312', $tc ) );
+leadkit_send_warm_browsers();
+lk_eq( array( lk_clicked( '8301' ), lk_clicked( '8302' ), array_slice( lk_dk_log(), -1 ) ), array( null, null, array( 'e20261026-104312 email click not recorded: 2 Emailed subitems have this email id' ) ), 'email click, two subitems, no key: neither set, noted' );
+
+// An id that never finds its subitem is given up after three days.
+lk_setup();
+lk_subitems( array() );
+update_option( LEADKIT_EMAIL_CLICKS, array( "$E e20261001-000000" => array( 'visitor' => $E, 'id' => 'e20261001-000000', 'day' => '2026-10-01', 'person' => '', 'at' => time() - 4 * DAY_IN_SECONDS ) ) );
+leadkit_email_clicks_run();
+lk_eq( array( (array) get_option( LEADKIT_EMAIL_CLICKS, array() ), lk_dk_log() ), array( array(), array( 'e20261001-000000 email click not recorded: no Emailed subitem has this email id after three days' ) ), 'email click: given up after three days, noted' );
+
+// A campaign touch whose utm_term is not an email id: nothing looked up.
+lk_setup();
+lk_subitems( array( '8401' => array( '7001', 'paid-search', null ) ) );
+LkWorker::put( $A, lk_email_story( array( lk_view( 'a1', '/', $tc ) ), 'paid-search', $tc ), array( 'prefix' => 'b', 'id' => '12345', 'key' => 'b-12345-7cf7' ) );
+leadkit_send_warm_browsers();
+lk_eq( array( $subQueries(), (array) get_option( LEADKIT_EMAIL_CLICKS, array() ), lk_clicked( '8401' ) ), array( 0, array(), null ), 'a utm_term that is not an email id: nothing looked up or set' );
 
 lk_done();
 

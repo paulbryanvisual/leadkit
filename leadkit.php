@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.9.0
+ * Version:           1.9.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan, PrettyGrand.com
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.9.0' );
+define( 'LEADKIT_VERSION', '1.9.1' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -48,6 +48,7 @@ require_once LEADKIT_DIR . '/includes/monday-crm.php';
 require_once LEADKIT_DIR . '/includes/visitors.php';
 require_once LEADKIT_DIR . '/includes/browsers.php';
 require_once LEADKIT_DIR . '/includes/donor-keys.php';
+require_once LEADKIT_DIR . '/includes/email-clicks.php';
 require_once LEADKIT_DIR . '/includes/gifts.php';
 require_once LEADKIT_DIR . '/includes/monday-form.php';
 
