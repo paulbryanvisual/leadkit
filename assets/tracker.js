@@ -21,6 +21,10 @@
  * a monday.com Visitors board; a post that fails is queued and resent on the
  * next page load. window.LeadKitAnalytics.attribution() / .packedSource()
  * expose the same to other scripts on the page.
+ *
+ * A donor key on an email link (?dk=b-1234-1a2b) is taken out of the address
+ * bar, kept with the visitor id and sent only to the Visits Worker (visitsUrl),
+ * which checks it; it is never put on a donation link.
  */
 (function () {
 	'use strict';
@@ -35,6 +39,7 @@
 	var TRACK_URL = typeof cfg.trackUrl === 'string' ? cfg.trackUrl : '';
 	var VISITOR_URL = typeof cfg.visitorUrl === 'string' ? cfg.visitorUrl : '';
 	var VISITS_URL = typeof cfg.visitsUrl === 'string' ? cfg.visitsUrl : '';
+	var DK_URL = typeof cfg.donorKeyUrl === 'string' ? cfg.donorKeyUrl : '';
 	var SUBMIT_ACTION = cfg.submitAction || '/api/submit';
 
 	var UTM_KEYS = [ 'source', 'medium', 'campaign', 'content', 'term' ];
@@ -77,6 +82,9 @@
 	var PATH_MAX = 600;
 	var DETAIL_MAX = 1000;
 	var LEAD_PARAM = 'leadkit_lead';
+	// A donor key on an email link: b-<account id>-<code> or m-<item id>-<code>.
+	var DK_PARAM = 'dk';
+	var DK_RE = /^[bm]-\d{1,20}-[0-9a-f]{4}$/;
 	var HISTORY_PARAM = typeof cfg.historyParam === 'string' ? cfg.historyParam : 'campaign_history';
 	var FORM_HOSTS = ( Array.isArray( cfg.formHosts ) ? cfg.formHosts : [ 'forms.monday.com', 'wkf.ms' ] )
 		.map( function ( h ) {
@@ -238,8 +246,10 @@
 		 * last post is not sent again; one that is lost is covered by the
 		 * next, since the Worker merges. Sent as text/plain, a "simple"
 		 * request: no CORS preflight, so one request per post, not two.
+		 *
+		 * @param {Function} [then] Called once the Worker has answered.
 		 */
-		postVisit() {
+		postVisit( then ) {
 			if ( ! VISITS_URL || ! this.data.id ) return;
 			this.recordPageView();
 			var views = this.data.page_views || [];
@@ -248,7 +258,10 @@
 			var sig = [ views.length, last.id, last.active_time_ms, last.max_scroll_percent, ( this.data.donate_clicks || [] ).length, ( this.data.lead_forms || [] ).length ].join( '|' );
 			if ( sig === this.lastVisitSig ) return;
 			this.lastVisitSig = sig;
-			var json = JSON.stringify( this.visitorBody() );
+			var body = this.visitorBody();
+			// The donor key goes to the Worker only: it alone can check it.
+			if ( this.data.dk && this.data.dk.key ) body.dk = this.data.dk.key;
+			var json = JSON.stringify( body );
 			try {
 				fetch( VISITS_URL, {
 					method: 'POST',
@@ -257,12 +270,31 @@
 					keepalive: true,
 					credentials: 'omit',
 					mode: 'cors',
-				} ).catch( function () {} );
+				} ).then( then || function () {} ).catch( function () {} );
 			} catch ( e ) {
 				try {
 					if ( navigator.sendBeacon ) navigator.sendBeacon( VISITS_URL, new Blob( [ json ], { type: 'text/plain;charset=UTF-8' } ) );
 				} catch ( e2 ) {}
 			}
+		}
+
+		/**
+		 * Ask WordPress to write this browser to monday.com now, rather than
+		 * on its next background run: the Worker has the donor key, and
+		 * WordPress takes the browser from the Worker. The key itself is not
+		 * sent here, since only the Worker can check it.
+		 */
+		postDonorKey() {
+			if ( ! DK_URL || ! this.data.id ) return;
+			try {
+				fetch( DK_URL, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify( { visitor_id: this.data.id } ),
+					keepalive: true,
+					credentials: 'omit',
+				} ).catch( function () {} );
+			} catch ( e ) {}
 		}
 
 		/** The browser's IANA time zone, or ''. */
@@ -326,6 +358,40 @@
 
 		hasCampaign( touch ) {
 			return !! ( touch && ( touch.source || touch.medium || touch.campaign || touch.content ) );
+		}
+
+		/**
+		 * A donor key from an email link: ?dk=b-1234-1a2b names the donor (b-
+		 * their CRM account, m- their People item) with a short code only the
+		 * server can check. It is kept as given — the latest one — and sent
+		 * to the Visits Worker with each visit, and the Worker decides whether
+		 * it is real. Only a browser that runs this script gets here, so a
+		 * link scanner opening the email never counts as a click.
+		 *
+		 * The key is taken out of the address bar at once, every other
+		 * parameter left as it was, so a reload, a shared link or anything
+		 * the page passes on does not carry it. It is never a campaign field,
+		 * so it is never in a packed source.
+		 *
+		 * @return {boolean} Whether a new key arrived.
+		 */
+		captureDonorKey() {
+			try {
+				var q = new URLSearchParams( window.location.search );
+				if ( ! q.has( DK_PARAM ) ) return false;
+				var dk = String( q.get( DK_PARAM ) || '' ).trim().toLowerCase();
+				q.delete( DK_PARAM );
+				var rest = q.toString();
+				if ( window.history && window.history.replaceState ) {
+					window.history.replaceState( null, '', window.location.pathname + ( rest ? '?' + rest : '' ) + window.location.hash );
+				}
+				if ( ! DK_RE.test( dk ) ) return false;
+				this.data.dk = { key: dk, time: new Date().toISOString() };
+				this.saveData();
+				return true;
+			} catch ( e ) {
+				return false;
+			}
 		}
 
 		sameCampaign( a, b ) {
@@ -820,12 +886,14 @@
 				} );
 			}
 
-			var same = Object.keys( want ).every( function ( k ) {
+			// A donor key is never passed on, should the widget copy the page's.
+			var same = ! url.searchParams.has( DK_PARAM ) && Object.keys( want ).every( function ( k ) {
 				var have = url.searchParams.getAll( k );
 				return have.length === 1 && have[ 0 ] === want[ k ];
 			} );
 			if ( same ) return null;
 
+			url.searchParams.delete( DK_PARAM );
 			Object.keys( want ).forEach( function ( k ) {
 				url.searchParams.set( k, want[ k ] );
 			} );
@@ -1248,6 +1316,9 @@
 
 			this.purgeUntracked();
 
+			// Before anything reads the address bar, so the key is out of it.
+			var donorKey = this.captureDonorKey();
+
 			// Campaign touches: latest, first, and the run between.
 			this.captureCampaign();
 
@@ -1312,6 +1383,14 @@
 
 			// Anything an earlier page could not confirm it sent.
 			this.flushOutbox();
+
+			// A donor key just arrived: to the Worker now, not when the page is
+			// left, and once it has it, WordPress writes the browser at once.
+			if ( donorKey ) {
+				this.postVisit( function () {
+					self.postDonorKey();
+				} );
+			}
 
 			// Active-time tracking.
 			document.addEventListener( 'visibilitychange', function () {

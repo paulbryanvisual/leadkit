@@ -220,6 +220,8 @@ add_action(
 					'visitorUrl'    => leadkit_visitors_enabled() ? rest_url( LEADKIT_REST_NS . '/visitor' ) : '',
 					// Only with a Visits Worker set: every visit goes straight there.
 					'visitsUrl'     => leadkit_visits_post_url(),
+					// With both: a donor key's browser is written at once, not next run.
+					'donorKeyUrl'   => leadkit_browsers_enabled() && leadkit_visitors_enabled() ? rest_url( LEADKIT_REST_NS . '/donor-key' ) : '',
 					'packPairSep'   => leadkit_pack_pair_sep(),
 					// So pages recorded there before the setting are dropped too.
 					'untrackedPaths' => leadkit_untracked_paths(),

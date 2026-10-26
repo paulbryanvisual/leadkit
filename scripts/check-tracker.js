@@ -440,6 +440,72 @@ function query( url ) {
 	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
 	eq( p.calls.length, 0, 'visit: setting off (no visitsUrl), nothing posted' );
 
+	// ---- donor keys (?dk=) on email links ---------------------------------------------------
+	const DK_URL = 'https://3sgf.org/wp-json/leadkit/v1/donor-key';
+	const dkCfg = { visitsUrl: VISITS, donorKeyUrl: DK_URL };
+	p = boot( {
+		url: 'https://3sgf.org/give/?utm_medium=email&utm_source=mailchimp&utm_campaign=light-the-path&dk=B-12345-1A2B&ref=x#top',
+		html: '<a id="give" href="' + GL + '">Give</a><div data-widget-src="' + GL + '?ref=sd_widget" id="give-lively-widget"></div>',
+		cfg: dkCfg,
+		storage: { leadkit_analytics_session: session() },
+	} );
+	eq( p.w.location.href, 'https://3sgf.org/give/?utm_medium=email&utm_source=mailchimp&utm_campaign=light-the-path&ref=x#top', 'dk: out of the address bar, every other parameter and the #hash kept' );
+	eq( p.t.data.dk && p.t.data.dk.key, 'b-12345-1a2b', 'dk: kept with the visitor, lowercased' );
+	eq( [ p.t.data.utm.medium, p.t.data.utm.source, p.t.data.utm.campaign ], [ 'email', 'mailchimp', 'light-the-path' ], 'dk: the UTMs on the same link still captured' );
+	let dkVisits = p.calls.filter( ( c ) => c.url === VISITS );
+	eq( dkVisits.length, 1, 'dk: posted to the Worker on landing, not only on leaving' );
+	eq( ( dkVisits[ 0 ] || {} ).body && [ dkVisits[ 0 ].body.visitor_id, dkVisits[ 0 ].body.dk ], [ '8f3k2q9a', 'b-12345-1a2b' ], 'dk: the Worker post carries the visitor id and the key' );
+	await tick();
+	const dkNow = p.calls.filter( ( c ) => c.url === DK_URL );
+	eq( dkNow.map( ( c ) => c.body ), [ { visitor_id: '8f3k2q9a' } ], 'dk: once the Worker answers, WordPress is asked to write the browser now — the id only, no key' );
+	const giveHref = p.w.document.getElementById( 'give' ).getAttribute( 'href' );
+	ok( ! query( giveHref ).has( 'dk' ) && giveHref.indexOf( '1a2b' ) === -1 && giveHref.indexOf( '12345' ) === -1, 'dk: not on the donation link', giveHref );
+	eq( query( giveHref ).get( 'utm_source' ), 'medium.email__source.mailchimp__campaign.light-the-path__visitorid.8f3k2q9a', 'dk: the packed source is the campaign and visitor id only' );
+	const widgetDk = p.w.document.getElementById( 'give-lively-widget' ).getAttribute( 'data-widget-src' );
+	ok( ! query( widgetDk ).has( 'dk' ) && widgetDk.indexOf( '1a2b' ) === -1, 'dk: not on the Branded widget', widgetDk );
+	ok( ! ( 'dk' in p.t.visitorBody() ) && JSON.stringify( p.t.formParams() ).indexOf( '1a2b' ) === -1, 'dk: not in the Visitors post or form parameters' );
+	p.w.document.getElementById( 'give' ).dispatchEvent( new p.w.MouseEvent( 'click', { bubbles: true, cancelable: true } ) );
+	await tick();
+	const dkVisitor = p.calls.filter( ( c ) => c.url === VISITOR_URL );
+	ok( dkVisitor.length === 1 && JSON.stringify( dkVisitor[ 0 ].body ).indexOf( '1a2b' ) === -1, 'dk: the Donate click post to WordPress carries no key', dkVisitor.map( ( c ) => c.body && c.body.dk ) );
+	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
+	dkVisits = p.calls.filter( ( c ) => c.url === VISITS );
+	eq( dkVisits.map( ( c ) => c.body.dk ), [ 'b-12345-1a2b', 'b-12345-1a2b' ], 'dk: and every Worker post after it' );
+
+	// A frame the widget drew from the page's own address, key and all.
+	p = boot( {
+		url: 'https://3sgf.org/give/?dk=m-13365350571-0f9e',
+		html: '<div id="give-lively-widget" class="gl-branded-donation-widget"><iframe id="give-lively-widget-inner" src="' + GL + '?ref=sd_widget&dk=m-13365350571-0f9e&utm_source=x"></iframe></div>',
+		cfg: dkCfg,
+		storage: { leadkit_analytics_session: session() },
+	} );
+	await tick();
+	const dkFrame = p.w.document.getElementById( 'give-lively-widget-inner' ).getAttribute( 'src' );
+	ok( ! query( dkFrame ).has( 'dk' ) && query( dkFrame ).get( 'ref' ) === 'sd_widget', 'dk: taken off a Give Lively frame that copied it', dkFrame );
+	eq( [ p.w.location.href, p.t.data.dk.key ], [ 'https://3sgf.org/give/', 'm-13365350571-0f9e' ], 'dk: an m- key, the address left with no ?' );
+
+	// Not a key: still taken out of the address bar, but kept nowhere and sent nowhere.
+	[ 'b-12345-zzzz', 'x-12345-1a2b', 'b-12a45-1a2b', '<script>', '' ].forEach( ( bad ) => {
+		p = boot( { url: 'https://3sgf.org/give/?utm_source=mailchimp&dk=' + encodeURIComponent( bad ), cfg: dkCfg, storage: { leadkit_analytics_session: session() } } );
+		ok( p.w.location.href === 'https://3sgf.org/give/?utm_source=mailchimp' && ! p.t.data.dk && p.calls.length === 0, 'dk: malformed "' + bad + '" dropped, nothing posted', [ p.w.location.href, p.t.data.dk, p.calls.length ] );
+	} );
+
+	// A later page with no key: the stored one goes with the visit, nothing is asked of WordPress.
+	p = boot( { url: 'https://3sgf.org/about/?utm_source=x', cfg: dkCfg, storage: { leadkit_analytics_session: session( { dk: { key: 'b-12345-1a2b', time: '2026-10-20T15:00:00.000Z' } } ) } } );
+	eq( p.w.location.href, 'https://3sgf.org/about/?utm_source=x', 'dk: no key in the URL, the address bar untouched' );
+	eq( p.calls.length, 0, 'dk: a repeat visit posts nothing on landing' );
+	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
+	await tick();
+	eq( p.calls.map( ( c ) => [ c.url, c.body.dk ] ), [ [ VISITS, 'b-12345-1a2b' ] ], 'dk: the kept key goes with the visit on leaving, and only to the Worker' );
+
+	// A newer key replaces the older one.
+	p = boot( { url: 'https://3sgf.org/?dk=b-777-abcd', cfg: dkCfg, storage: { leadkit_analytics_session: session( { dk: { key: 'b-12345-1a2b', time: '2026-10-20T15:00:00.000Z' } } ) } } );
+	eq( p.t.data.dk.key, 'b-777-abcd', 'dk: the latest key wins' );
+
+	// No key, no Worker: nothing new.
+	p = boot( { url: 'https://3sgf.org/give/?utm_source=mailchimp&ref=x', storage: { leadkit_analytics_session: session() } } );
+	ok( p.w.location.href === 'https://3sgf.org/give/?utm_source=mailchimp&ref=x' && ! ( 'dk' in p.t.data ) && p.calls.length === 0, 'dk: a visitor without one is left exactly as before', [ p.w.location.href, p.t.data.dk ] );
+
 	console.log( ( failed ? 'FAILED' : 'ok' ) + ' — ' + passed + ' passed, ' + failed + ' failed' );
 	process.exit( failed ? 1 : 0 );
 } )().catch( ( e ) => {
