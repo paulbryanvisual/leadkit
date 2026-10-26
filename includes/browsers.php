@@ -147,6 +147,9 @@ function leadkit_send_warm_browsers( $only = '' ) {
 	 */
 	$max  = max( 1, min( 100, (int) apply_filters( 'leadkit/browsers_per_run', LEADKIT_BROWSERS_PER_RUN ) ) );
 	$only = leadkit_clean_visitor_id( (string) $only );
+	if ( ! $only ) {
+		leadkit_donor_keys_run(); // Keys still to look up go to the Worker first, so they come back below.
+	}
 	$warm = leadkit_visits_call( 'GET', $only ? '/warm?limit=1&visitor=' . rawurlencode( $only ) : '/warm?limit=' . $max );
 	if ( ! $warm ) {
 		return 0;
@@ -161,7 +164,7 @@ function leadkit_send_warm_browsers( $only = '' ) {
 		}
 		// The Worker is trusted for what it decides, not for what it stores:
 		// the story came from a browser, so it is cleaned like any other post.
-		// A donor key it sends has been checked there.
+		// A donor key it sends is one WordPress matched (donor-keys.php).
 		leadkit_use_visitor_tz( (string) ( $story['timezone'] ?? '' ) );
 		$dk  = leadkit_clean_donor_key( $b['dk'] ?? null );
 		$row = leadkit_visitor_upsert( $visitor, $story, $dk ? array( 'dk' => $dk ) : array() );

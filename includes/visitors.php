@@ -223,8 +223,8 @@ function leadkit_visitor_row_key( $visitor ) {
  * @param array  $data    analyticsData, or a Visitors post: started_at, referrer,
  *                        utm, utm_first, utm_touches, page_views, donate_clicks,
  *                        lead_forms, donation_returns (or events).
- * @param array  $link    { item?, person? } to connect; dk?: a donor key the
- *                        Visits Worker checked ("b-12345").
+ * @param array  $link    { item?, person? } to connect; dk?: a donor key
+ *                        matched in monday.com ("b-22758-7cf7").
  * @return string Row item id, '' when nothing could be written.
  */
 function leadkit_visitor_upsert( $visitor, $data, $link = array() ) {
@@ -306,7 +306,7 @@ function leadkit_visitor_write( $board, $visitor, $data, $link ) {
 		'person'  => '',      // Person still to connect.
 		'linked'  => '',      // Person already connected.
 		'brief'   => array(), // That person's name and address, for Open person links.
-		'dk'      => '',      // The latest donor key the Visits Worker vouched for: "b-12345".
+		'dk'      => '',      // The latest donor key matched in monday.com: "b-22758-7cf7".
 		'dk_done' => '',      // The key last seen through (donor-keys.php).
 		'dk_miss' => 0,       // When that key last matched no donor.
 	);

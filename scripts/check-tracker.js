@@ -444,63 +444,76 @@ function query( url ) {
 	const DK_URL = 'https://3sgf.org/wp-json/leadkit/v1/donor-key';
 	const dkCfg = { visitsUrl: VISITS, donorKeyUrl: DK_URL };
 	p = boot( {
-		url: 'https://3sgf.org/give/?utm_medium=email&utm_source=mailchimp&utm_campaign=light-the-path&dk=B-12345-1A2B&ref=x#top',
+		url: 'https://3sgf.org/donate/?utm_source=personal-email&utm_medium=email&utm_campaign=eoy-appeal-2026&dk=B-22758-7CF7&ref=x#top',
 		html: '<a id="give" href="' + GL + '">Give</a><div data-widget-src="' + GL + '?ref=sd_widget" id="give-lively-widget"></div>',
 		cfg: dkCfg,
 		storage: { leadkit_analytics_session: session() },
 	} );
-	eq( p.w.location.href, 'https://3sgf.org/give/?utm_medium=email&utm_source=mailchimp&utm_campaign=light-the-path&ref=x#top', 'dk: out of the address bar, every other parameter and the #hash kept' );
-	eq( p.t.data.dk && p.t.data.dk.key, 'b-12345-1a2b', 'dk: kept with the visitor, lowercased' );
-	eq( [ p.t.data.utm.medium, p.t.data.utm.source, p.t.data.utm.campaign ], [ 'email', 'mailchimp', 'light-the-path' ], 'dk: the UTMs on the same link still captured' );
+	eq( p.w.location.href, 'https://3sgf.org/donate/?utm_source=personal-email&utm_medium=email&utm_campaign=eoy-appeal-2026&ref=x#top', 'dk: out of the address bar, every other parameter and the #hash kept' );
+	eq( p.t.data.dk && [ p.t.data.dk.key, p.t.data.dk.sent ], [ 'b-22758-7cf7', false ], 'dk: kept with the visitor, lowercased, not yet sent' );
+	eq( [ p.t.data.utm.medium, p.t.data.utm.source, p.t.data.utm.campaign ], [ 'email', 'personal-email', 'eoy-appeal-2026' ], 'dk: the UTMs on the same link still captured' );
 	let dkVisits = p.calls.filter( ( c ) => c.url === VISITS );
-	eq( dkVisits.length, 1, 'dk: posted to the Worker on landing, not only on leaving' );
-	eq( ( dkVisits[ 0 ] || {} ).body && [ dkVisits[ 0 ].body.visitor_id, dkVisits[ 0 ].body.dk ], [ '8f3k2q9a', 'b-12345-1a2b' ], 'dk: the Worker post carries the visitor id and the key' );
+	eq( dkVisits.length, 1, 'dk: the visit posted to the Worker on landing, not only on leaving' );
+	ok( dkVisits[ 0 ] && ! ( 'dk' in dkVisits[ 0 ].body ) && JSON.stringify( dkVisits[ 0 ].body ).indexOf( '7cf7' ) === -1, 'dk: the Worker post carries no key', dkVisits[ 0 ] && dkVisits[ 0 ].body.dk );
+	ok( p.calls.filter( ( c ) => c.url === DK_URL ).length === 0, 'dk: WordPress is not asked before the Worker has answered' );
 	await tick();
-	const dkNow = p.calls.filter( ( c ) => c.url === DK_URL );
-	eq( dkNow.map( ( c ) => c.body ), [ { visitor_id: '8f3k2q9a' } ], 'dk: once the Worker answers, WordPress is asked to write the browser now — the id only, no key' );
+	eq( p.calls.filter( ( c ) => c.url === DK_URL ).map( ( c ) => c.body ), [ { visitor_id: '8f3k2q9a', dk: 'b-22758-7cf7' } ], 'dk: then the key and visitor id go to WordPress' );
+	await tick();
+	eq( p.t.data.dk.sent, true, 'dk: WordPress answered, so it is not sent again' );
 	const giveHref = p.w.document.getElementById( 'give' ).getAttribute( 'href' );
-	ok( ! query( giveHref ).has( 'dk' ) && giveHref.indexOf( '1a2b' ) === -1 && giveHref.indexOf( '12345' ) === -1, 'dk: not on the donation link', giveHref );
-	eq( query( giveHref ).get( 'utm_source' ), 'medium.email__source.mailchimp__campaign.light-the-path__visitorid.8f3k2q9a', 'dk: the packed source is the campaign and visitor id only' );
+	ok( ! query( giveHref ).has( 'dk' ) && giveHref.indexOf( '7cf7' ) === -1 && giveHref.indexOf( '22758' ) === -1, 'dk: not on the donation link', giveHref );
+	eq( query( giveHref ).get( 'utm_source' ), 'medium.email__source.personal-email__campaign.eoy-appeal-2026__visitorid.8f3k2q9a', 'dk: the packed source is the campaign and visitor id only' );
 	const widgetDk = p.w.document.getElementById( 'give-lively-widget' ).getAttribute( 'data-widget-src' );
-	ok( ! query( widgetDk ).has( 'dk' ) && widgetDk.indexOf( '1a2b' ) === -1, 'dk: not on the Branded widget', widgetDk );
-	ok( ! ( 'dk' in p.t.visitorBody() ) && JSON.stringify( p.t.formParams() ).indexOf( '1a2b' ) === -1, 'dk: not in the Visitors post or form parameters' );
+	ok( ! query( widgetDk ).has( 'dk' ) && widgetDk.indexOf( '7cf7' ) === -1, 'dk: not on the Branded widget', widgetDk );
+	ok( ! ( 'dk' in p.t.visitorBody() ) && JSON.stringify( p.t.formParams() ).indexOf( '7cf7' ) === -1, 'dk: not in the Visitors post or form parameters' );
 	p.w.document.getElementById( 'give' ).dispatchEvent( new p.w.MouseEvent( 'click', { bubbles: true, cancelable: true } ) );
 	await tick();
 	const dkVisitor = p.calls.filter( ( c ) => c.url === VISITOR_URL );
-	ok( dkVisitor.length === 1 && JSON.stringify( dkVisitor[ 0 ].body ).indexOf( '1a2b' ) === -1, 'dk: the Donate click post to WordPress carries no key', dkVisitor.map( ( c ) => c.body && c.body.dk ) );
+	ok( dkVisitor.length === 1 && JSON.stringify( dkVisitor[ 0 ].body ).indexOf( '7cf7' ) === -1, 'dk: the Donate click post to WordPress carries no key', dkVisitor.map( ( c ) => c.body && c.body.dk ) );
 	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
-	dkVisits = p.calls.filter( ( c ) => c.url === VISITS );
-	eq( dkVisits.map( ( c ) => c.body.dk ), [ 'b-12345-1a2b', 'b-12345-1a2b' ], 'dk: and every Worker post after it' );
+	await tick();
+	ok( p.calls.filter( ( c ) => c.url === VISITS ).every( ( c ) => ! ( 'dk' in c.body ) ) && p.calls.filter( ( c ) => c.url === DK_URL ).length === 1, 'dk: leaving posts the visit, still without the key, and does not resend it', p.calls.map( ( c ) => c.url ) );
 
 	// A frame the widget drew from the page's own address, key and all.
 	p = boot( {
-		url: 'https://3sgf.org/give/?dk=m-13365350571-0f9e',
-		html: '<div id="give-lively-widget" class="gl-branded-donation-widget"><iframe id="give-lively-widget-inner" src="' + GL + '?ref=sd_widget&dk=m-13365350571-0f9e&utm_source=x"></iframe></div>',
+		url: 'https://3sgf.org/donate/?dk=m-13365350571-629a',
+		html: '<div id="give-lively-widget" class="gl-branded-donation-widget"><iframe id="give-lively-widget-inner" src="' + GL + '?ref=sd_widget&dk=m-13365350571-629a&utm_source=x"></iframe></div>',
 		cfg: dkCfg,
 		storage: { leadkit_analytics_session: session() },
 	} );
 	await tick();
 	const dkFrame = p.w.document.getElementById( 'give-lively-widget-inner' ).getAttribute( 'src' );
 	ok( ! query( dkFrame ).has( 'dk' ) && query( dkFrame ).get( 'ref' ) === 'sd_widget', 'dk: taken off a Give Lively frame that copied it', dkFrame );
-	eq( [ p.w.location.href, p.t.data.dk.key ], [ 'https://3sgf.org/give/', 'm-13365350571-0f9e' ], 'dk: an m- key, the address left with no ?' );
+	eq( [ p.w.location.href, p.t.data.dk.key ], [ 'https://3sgf.org/donate/', 'm-13365350571-629a' ], 'dk: an m- key, the address left with no ?' );
 
 	// Not a key: still taken out of the address bar, but kept nowhere and sent nowhere.
-	[ 'b-12345-zzzz', 'x-12345-1a2b', 'b-12a45-1a2b', '<script>', '' ].forEach( ( bad ) => {
-		p = boot( { url: 'https://3sgf.org/give/?utm_source=mailchimp&dk=' + encodeURIComponent( bad ), cfg: dkCfg, storage: { leadkit_analytics_session: session() } } );
-		ok( p.w.location.href === 'https://3sgf.org/give/?utm_source=mailchimp' && ! p.t.data.dk && p.calls.length === 0, 'dk: malformed "' + bad + '" dropped, nothing posted', [ p.w.location.href, p.t.data.dk, p.calls.length ] );
+	[ 'b-22758-zzzz', 'x-22758-7cf7', 'b-22a58-7cf7', 'b-22758', '<script>', '' ].forEach( ( bad ) => {
+		p = boot( { url: 'https://3sgf.org/donate/?utm_source=mailchimp&dk=' + encodeURIComponent( bad ), cfg: dkCfg, storage: { leadkit_analytics_session: session() } } );
+		ok( p.w.location.href === 'https://3sgf.org/donate/?utm_source=mailchimp' && ! p.t.data.dk && p.calls.length === 0, 'dk: malformed "' + bad + '" dropped, nothing posted', [ p.w.location.href, p.t.data.dk, p.calls.length ] );
 	} );
 
-	// A later page with no key: the stored one goes with the visit, nothing is asked of WordPress.
-	p = boot( { url: 'https://3sgf.org/about/?utm_source=x', cfg: dkCfg, storage: { leadkit_analytics_session: session( { dk: { key: 'b-12345-1a2b', time: '2026-10-20T15:00:00.000Z' } } ) } } );
-	eq( p.w.location.href, 'https://3sgf.org/about/?utm_source=x', 'dk: no key in the URL, the address bar untouched' );
-	eq( p.calls.length, 0, 'dk: a repeat visit posts nothing on landing' );
-	p.w.dispatchEvent( new p.w.Event( 'pagehide' ) );
+	// WordPress did not answer (a server error): sent again on the next page load, and only then.
+	p = boot( { url: 'https://3sgf.org/donate/?dk=b-22758-7cf7', cfg: dkCfg, storage: { leadkit_analytics_session: session() }, status: ( n ) => ( n === 2 ? 503 : 200 ) } );
 	await tick();
-	eq( p.calls.map( ( c ) => [ c.url, c.body.dk ] ), [ [ VISITS, 'b-12345-1a2b' ] ], 'dk: the kept key goes with the visit on leaving, and only to the Worker' );
+	await tick();
+	eq( p.t.data.dk.sent, false, 'dk: a 503 from WordPress, still to send' );
+	p = boot( { url: 'https://3sgf.org/about/', cfg: dkCfg, storage: storageOf( p.w ) } );
+	await tick();
+	await tick();
+	eq( [ p.calls.map( ( c ) => c.url ), p.t.data.dk.sent ], [ [ VISITS, DK_URL ], true ], 'dk: the next page load sends it, and then it is done' );
+	p = boot( { url: 'https://3sgf.org/hope/', cfg: dkCfg, storage: storageOf( p.w ) } );
+	await tick();
+	eq( p.calls.length, 0, 'dk: a page load after that sends nothing on landing' );
+	// A refusal (a key WordPress will never take) is not sent again either.
+	p = boot( { url: 'https://3sgf.org/donate/?dk=b-22758-7cf7', cfg: dkCfg, storage: { leadkit_analytics_session: session() }, status: ( n ) => ( n === 2 ? 400 : 200 ) } );
+	await tick();
+	await tick();
+	eq( p.t.data.dk.sent, true, 'dk: a 400 is not retried' );
 
-	// A newer key replaces the older one.
-	p = boot( { url: 'https://3sgf.org/?dk=b-777-abcd', cfg: dkCfg, storage: { leadkit_analytics_session: session( { dk: { key: 'b-12345-1a2b', time: '2026-10-20T15:00:00.000Z' } } ) } } );
-	eq( p.t.data.dk.key, 'b-777-abcd', 'dk: the latest key wins' );
+	// A newer key replaces the older one, and is sent.
+	p = boot( { url: 'https://3sgf.org/?dk=b-33744-f92c', cfg: dkCfg, storage: { leadkit_analytics_session: session( { dk: { key: 'b-22758-7cf7', time: '2026-10-20T15:00:00.000Z', sent: true } } ) } } );
+	await tick();
+	eq( [ p.t.data.dk.key, p.calls.filter( ( c ) => c.url === DK_URL ).map( ( c ) => c.body.dk ) ], [ 'b-33744-f92c', [ 'b-33744-f92c' ] ], 'dk: the latest key wins, and goes to WordPress' );
 
 	// No key, no Worker: nothing new.
 	p = boot( { url: 'https://3sgf.org/give/?utm_source=mailchimp&ref=x', storage: { leadkit_analytics_session: session() } } );

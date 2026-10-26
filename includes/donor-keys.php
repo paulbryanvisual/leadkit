@@ -2,39 +2,41 @@
 /**
  * Donor keys: an email link that says who the donor is.
  *
- * A link in a donor email can carry ?dk=b-<CRM account id>-<code> or
- * ?dk=m-<People item id>-<code>. The tracker takes it out of the address bar
- * and sends it only to the Visits Worker, which checks the code against
- * LEADKIT_DK_SECRET — a secret WordPress never holds — and keeps a valid key
- * on the browser's row, marked known. Only a browser that runs the tracker
- * gets that far, so a link scanner opening the email is never a click.
+ * A link in a donor email can carry ?dk=b-22758-7cf7 (a CRM account) or
+ * ?dk=m-13365350571-629a (a People item). The whole key is the person's
+ * "Donor key" on the People board — the board's own "Tracked link" formula
+ * puts it on the link — so a key is good when it is exactly someone's Donor
+ * key, and changing the number in a link matches no one. LeadKit only reads
+ * that column; it never writes it.
  *
- * The browser then comes to WordPress like any warm one, with its key (dk on
- * GET /warm), and its Visitors row is written as always — every earlier
- * visit with it, as a Visits row each. On top of that, and nothing else:
+ * The tracker takes the key out of the address bar and posts it here once
+ * the Visits Worker has the page's visit (only a browser that runs the
+ * tracker gets that far, so a link scanner opening the email is never a
+ * click):
  *
- *   Person, Open person   the donor's People row, on the Visitors row (and so
- *                         Open person on its visits). b-: the People row whose
- *                         "Bloomerang Account" is exactly that id; m-: that
- *                         item, once it is confirmed to be on the People
- *                         board. Never over a different person already there:
- *                         that is noted instead.
+ *   POST leadkit/v1/donor-key  { visitor_id, dk }
+ *
+ * After the answer, the key is looked up. No one's: noted, and nothing is
+ * kept or sent anywhere. Someone's: the Worker is told (POST /donor), which
+ * keeps it on the browser's row and makes it known, and that browser is
+ * written to monday.com at once — the Visitors row as always, every earlier
+ * visit as a Visits row, and on top of that, nothing else:
+ *
+ *   Person, Open person   the donor, on the Visitors row (and so Open person
+ *                         on its visits). Never over a different person
+ *                         already there: that is noted instead.
  *   Clicked email link    on the donor's People row: today, if it is empty.
  *
+ * A key that cannot be looked up yet (monday.com or the Worker not answering)
+ * waits in the leadkit_dk_pending option for the next background run, for a
+ * week. Background runs also link browsers the Worker sends with a key.
+ *
  * People columns are found by title (the leadkit/donor_key_columns filter
- * changes them) and never created. A key with no donor connects nothing and
- * is tried again a day later; the browser stays known in D1 either way.
- * What happened is kept in the leadkit_dk_log option (the last 50) and shown
- * on the settings screen.
- *
- *   POST leadkit/v1/donor-key  { visitor_id }, from the tracker the moment the
- *                              Worker has a new key: that one browser is
- *                              written now, not on the next background run.
- *
- * The route is public, as it must be, but it only ever writes what the Worker
- * says about that browser: it can make a write happen sooner, never a
- * different one. The key itself never reaches WordPress from a browser. Rate
- * limited per IP and per visitor.
+ * changes them) and never created. What happened is kept in the
+ * leadkit_dk_log option (the last 50) and shown on the settings screen. The
+ * route is public, as it must be: it is rate limited per IP and per visitor,
+ * answers the same whether or not a key is anyone's, and only ever connects
+ * a browser to the person whose Donor key it brought.
  *
  * @package LeadKit
  */
@@ -44,10 +46,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 const LEADKIT_DK_COLUMNS = array(
-	'b'       => 'Bloomerang Account', // Where a b- id is looked up, exactly.
+	'key'     => 'Donor key',          // The whole key, matched exactly.
 	'clicked' => 'Clicked email link', // Set to the day of the first click.
 );
-const LEADKIT_DK_LOG_MAX = 50;
+const LEADKIT_DK_RE          = '/^[bm]-\d{1,20}-[0-9a-f]{4}$/';
+const LEADKIT_DK_LOG_MAX     = 50;
+const LEADKIT_DK_PENDING     = 'leadkit_dk_pending';
+const LEADKIT_DK_PENDING_MAX = 200;
+const LEADKIT_DK_PER_RUN     = 25;
 
 add_action(
 	'rest_api_init',
@@ -67,36 +73,33 @@ add_action(
 /**
  * The People column titles donor keys use.
  *
- * @return array { b, clicked }
+ * @return array { key, clicked }
  */
 function leadkit_donor_key_columns() {
 	/**
-	 * The People columns donor keys use, by title: 'b' is where a b- id is
-	 * looked up (an exact match), 'clicked' the date set on a first click.
+	 * The People columns donor keys use, by title: 'key' is where a key is
+	 * looked up (the whole key, exactly), 'clicked' the date set on a first
+	 * click.
 	 *
-	 * @param array $titles { b, clicked }.
+	 * @param array $titles { key, clicked }.
 	 */
 	return (array) apply_filters( 'leadkit/donor_key_columns', LEADKIT_DK_COLUMNS ) + LEADKIT_DK_COLUMNS;
 }
 
 /**
- * A donor key as the Worker sends it, checked: { prefix, id } => "b-12345".
+ * A donor key, cleaned: "b-22758-7cf7", or '' when it is not one.
  *
- * @param mixed $dk From GET /warm.
- * @return string '' when there is none.
+ * @param mixed $dk A string, or the Worker's { key }.
+ * @return string
  */
 function leadkit_clean_donor_key( $dk ) {
-	$prefix = is_array( $dk ) ? (string) ( $dk['prefix'] ?? '' ) : '';
-	$id     = is_array( $dk ) ? (string) ( $dk['id'] ?? '' ) : '';
-	return preg_match( '/^[bm]$/', $prefix ) && preg_match( '/^\d{1,20}$/', $id ) ? $prefix . '-' . $id : '';
+	$dk = strtolower( trim( (string) ( is_array( $dk ) ? ( $dk['key'] ?? '' ) : $dk ) ) );
+	return preg_match( LEADKIT_DK_RE, $dk ) ? $dk : '';
 }
 
 /**
- * Write one browser now: the tracker has just given the Worker a donor key.
- *
- * Answers at once; the work happens after the answer, as for a form. The
- * browser is taken from the Worker, so a visitor id with no valid key, or
- * none at all, writes nothing the background run would not.
+ * A key from the tracker. Answers at once; the work happens after the
+ * answer, as for a form.
  *
  * @param WP_REST_Request $req Request.
  * @return WP_REST_Response
@@ -107,14 +110,15 @@ function leadkit_handle_donor_key( $req ) {
 	}
 	$body    = leadkit_json_body( $req );
 	$visitor = leadkit_clean_visitor_id( $body['visitor_id'] ?? '' );
-	if ( ! $visitor ) {
+	$dk      = leadkit_clean_donor_key( $body['dk'] ?? '' );
+	if ( ! $visitor || ! $dk ) {
 		return new WP_REST_Response( array( 'ok' => false ), 400 );
 	}
 	if ( ! leadkit_browsers_enabled() || ! leadkit_visitors_enabled() ) {
 		return new WP_REST_Response( array( 'ok' => true, 'off' => true ), 200 );
 	}
 
-	// A brake per IP: 10 in ten minutes; and each browser once a minute.
+	// A brake per IP: 10 in ten minutes; and each browser run once a minute.
 	$ip = leadkit_client_ip();
 	if ( $ip ) {
 		$k = 'leadkit_dkip_' . md5( $ip );
@@ -124,9 +128,10 @@ function leadkit_handle_donor_key( $req ) {
 		}
 		set_transient( $k, $n + 1, 10 * MINUTE_IN_SECONDS );
 	}
+	leadkit_donor_key_queue( $visitor, $dk );
 	$k = 'leadkit_dknow_' . md5( $visitor );
 	if ( get_transient( $k ) ) {
-		return new WP_REST_Response( array( 'ok' => true ), 200 );
+		return new WP_REST_Response( array( 'ok' => true ), 200 ); // The next background run has it.
 	}
 	set_transient( $k, 1, MINUTE_IN_SECONDS );
 
@@ -139,11 +144,82 @@ function leadkit_handle_donor_key( $req ) {
 				litespeed_finish_request();
 			}
 			ignore_user_abort( true );
-			leadkit_send_warm_browsers( $visitor );
+			if ( leadkit_donor_keys_run( $visitor ) ) {
+				leadkit_send_warm_browsers( $visitor );
+			}
 		},
 		90
 	);
 	return new WP_REST_Response( array( 'ok' => true ), 200 );
+}
+
+/**
+ * Keep a key to look up: the latest per browser, the newest
+ * LEADKIT_DK_PENDING_MAX browsers.
+ *
+ * @param string $visitor Visitor id.
+ * @param string $dk      Cleaned key.
+ * @return void
+ */
+function leadkit_donor_key_queue( $visitor, $dk ) {
+	$all = get_option( LEADKIT_DK_PENDING, array() );
+	$all = is_array( $all ) ? $all : array();
+	unset( $all[ $visitor ] ); // To the end: the newest.
+	$all[ $visitor ] = array( 'dk' => $dk, 'at' => time() );
+	update_option( LEADKIT_DK_PENDING, array_slice( $all, -LEADKIT_DK_PENDING_MAX, null, true ), false );
+}
+
+/**
+ * Look up the keys waiting: someone's goes to the Worker (POST /donor);
+ * no one's is noted and dropped; one that cannot be looked up yet waits.
+ *
+ * @param string $only One visitor id: that browser's key alone.
+ * @return string[] Visitor ids whose key is now with the Worker.
+ */
+function leadkit_donor_keys_run( $only = '' ) {
+	$all = get_option( LEADKIT_DK_PENDING, array() );
+	$all = is_array( $all ) ? $all : array();
+	$todo = $only ? array_intersect_key( $all, array( $only => 1 ) ) : array_slice( $all, 0, LEADKIT_DK_PER_RUN, true );
+	$done = array();
+	$gone = array();
+	foreach ( $todo as $visitor => $p ) {
+		$visitor = (string) $visitor;
+		$dk      = leadkit_clean_donor_key( $p['dk'] ?? '' );
+		if ( ! $dk ) {
+			$gone[] = $visitor;
+			continue;
+		}
+		$found = leadkit_donor_key_person( $dk );
+		if ( null === $found ) {
+			if ( time() - (int) ( $p['at'] ?? 0 ) > 7 * DAY_IN_SECONDS ) {
+				leadkit_dk_note( $visitor, $dk, 'given up: monday.com could not be asked for a week' );
+				$gone[] = $visitor;
+			}
+			continue;
+		}
+		if ( ! $found['id'] ) {
+			leadkit_dk_note( $visitor, $dk, $found['why'] );
+			$gone[] = $visitor;
+			continue;
+		}
+		if ( null === leadkit_visits_call( 'POST', '/donor', array( 'visitor' => $visitor, 'dk' => $dk ) ) ) {
+			continue; // The Worker did not take it: next run.
+		}
+		$gone[] = $visitor;
+		$done[] = $visitor;
+	}
+	if ( $gone ) {
+		// Read again: a key may have arrived meanwhile, and a newer one stays.
+		$now = get_option( LEADKIT_DK_PENDING, array() );
+		$now = is_array( $now ) ? $now : array();
+		foreach ( $gone as $visitor ) {
+			if ( isset( $now[ $visitor ] ) && ( $now[ $visitor ]['dk'] ?? '' ) === ( $todo[ $visitor ]['dk'] ?? '' ) ) {
+				unset( $now[ $visitor ] );
+			}
+		}
+		update_option( LEADKIT_DK_PENDING, $now, false );
+	}
+	return $done;
 }
 
 /**
@@ -158,14 +234,8 @@ function leadkit_handle_donor_key( $req ) {
  * @return void Left undone (tried again next write) when monday.com could not be asked.
  */
 function leadkit_donor_key_link( $board, $row, $visitor, $cols, &$st ) {
-	$key    = (string) $st['dk'];
-	$people = leadkit_monday_people_board();
-	$all    = $people ? leadkit_monday_board_columns( $people ) : null;
-	if ( null === $all ) {
-		return;
-	}
-	$titles = leadkit_donor_key_columns();
-	$found  = leadkit_donor_key_person( $people, $key, $all, $titles );
+	$key   = (string) $st['dk'];
+	$found = leadkit_donor_key_person( $key );
 	if ( null === $found ) {
 		return;
 	}
@@ -205,6 +275,12 @@ function leadkit_donor_key_link( $board, $row, $visitor, $cols, &$st ) {
 	}
 
 	// The donor's People row: the day of the first click on an email link.
+	$titles  = leadkit_donor_key_columns();
+	$people  = leadkit_monday_people_board();
+	$all     = leadkit_monday_board_columns( $people );
+	if ( null === $all ) {
+		return;
+	}
 	$clicked = $all[ strtolower( $titles['clicked'] ) ] ?? null;
 	if ( ! $clicked || 'date' !== $clicked['type'] ) {
 		leadkit_dk_note( $visitor, $key, sprintf( 'no "%s" date column on the People board', $titles['clicked'] ) );
@@ -228,37 +304,29 @@ function leadkit_donor_key_link( $board, $row, $visitor, $cols, &$st ) {
 }
 
 /**
- * The People row a donor key names.
+ * The People row whose Donor key is exactly this key.
  *
- * @param string $people People board id.
- * @param string $key    "b-12345" or "m-6789".
- * @param array  $all    People columns by lowercase title.
- * @param array  $titles From leadkit_donor_key_columns().
- * @return array|null { id, brief, why }: id '' with why when there is none; null when monday.com could not be asked.
+ * @param string $key "b-22758-7cf7".
+ * @return array|null { id, brief, why }: id '' with why when it is no one's; null when monday.com could not be asked.
  */
-function leadkit_donor_key_person( $people, $key, $all, $titles ) {
-	list( $prefix, $id ) = explode( '-', $key, 2 );
-	$none                = fn( $why ) => array( 'id' => '', 'brief' => array(), 'why' => $why );
-
-	if ( 'm' === $prefix ) {
-		$data = leadkit_monday( 'query ($i: [ID!]) { items(ids: $i) { id name url board { id } } }', array( 'i' => array( $id ) ) );
-		if ( null === $data ) {
-			return null;
-		}
-		$it = $data['items'][0] ?? null;
-		if ( ! $it || (string) ( $it['board']['id'] ?? '' ) !== (string) $people || empty( $it['url'] ) ) {
-			return $none( 'no match: no such item on the People board' );
-		}
-		return array( 'id' => (string) $it['id'], 'brief' => array( 'name' => (string) $it['name'], 'url' => (string) $it['url'] ), 'why' => '' );
+function leadkit_donor_key_person( $key ) {
+	$none   = fn( $why ) => array( 'id' => '', 'brief' => array(), 'why' => $why );
+	$people = leadkit_monday_people_board();
+	if ( ! $people ) {
+		return $none( 'no People board set' );
 	}
-
-	$col = $all[ strtolower( $titles['b'] ) ]['id'] ?? '';
+	$all = leadkit_monday_board_columns( $people );
+	if ( null === $all ) {
+		return null;
+	}
+	$title = leadkit_donor_key_columns()['key'];
+	$col   = $all[ strtolower( $title ) ]['id'] ?? '';
 	if ( ! $col ) {
-		return $none( sprintf( 'no match: no "%s" column on the People board', $titles['b'] ) );
+		return $none( sprintf( 'no match: no "%s" column on the People board', $title ) );
 	}
 	$data = leadkit_monday(
 		'query ($b: ID!, $c: String!, $v: [String]!, $r: [String!]) { items_page_by_column_values(board_id: $b, limit: 5, columns: [{column_id: $c, column_values: $v}]) { items { id name url column_values(ids: $r) { text } } } }',
-		array( 'b' => (string) $people, 'c' => $col, 'v' => array( $id ), 'r' => array( $col ) )
+		array( 'b' => (string) $people, 'c' => $col, 'v' => array( $key ), 'r' => array( $col ) )
 	);
 	if ( null === $data ) {
 		return null;
@@ -266,14 +334,14 @@ function leadkit_donor_key_person( $people, $key, $all, $titles ) {
 	$hits = array_values(
 		array_filter(
 			(array) ( $data['items_page_by_column_values']['items'] ?? array() ),
-			fn( $it ) => trim( (string) ( $it['column_values'][0]['text'] ?? '' ) ) === $id && ! empty( $it['url'] )
+			fn( $it ) => strtolower( trim( (string) ( $it['column_values'][0]['text'] ?? '' ) ) ) === $key && ! empty( $it['url'] )
 		)
 	);
 	if ( ! $hits ) {
-		return $none( sprintf( 'no match: no People row has %s %s', $titles['b'], $id ) );
+		return $none( sprintf( 'no match: no People row has %s %s', $title, $key ) );
 	}
 	if ( count( $hits ) > 1 ) {
-		return $none( sprintf( 'not connected: %d People rows have %s %s (%s)', count( $hits ), $titles['b'], $id, implode( ', ', array_column( $hits, 'id' ) ) ) );
+		return $none( sprintf( 'not connected: %d People rows have %s %s (%s)', count( $hits ), $title, $key, implode( ', ', array_column( $hits, 'id' ) ) ) );
 	}
 	return array( 'id' => (string) $hits[0]['id'], 'brief' => array( 'name' => (string) $hits[0]['name'], 'url' => (string) $hits[0]['url'] ), 'why' => '' );
 }
@@ -305,11 +373,11 @@ function leadkit_visitor_person_now( $row, $cols ) {
 }
 
 /**
- * Note what a donor key did, keeping the last LEADKIT_DK_LOG_MAX. The key is
- * kept without its code; nothing about the donor but their item id.
+ * Note what a donor key did, keeping the last LEADKIT_DK_LOG_MAX. Nothing
+ * about the donor but their item id.
  *
  * @param string $visitor Visitor id.
- * @param string $key     "b-12345".
+ * @param string $key     The key.
  * @param string $what    What happened.
  * @return void
  */

@@ -22,9 +22,9 @@
  * next page load. window.LeadKitAnalytics.attribution() / .packedSource()
  * expose the same to other scripts on the page.
  *
- * A donor key on an email link (?dk=b-1234-1a2b) is taken out of the address
- * bar, kept with the visitor id and sent only to the Visits Worker (visitsUrl),
- * which checks it; it is never put on a donation link.
+ * A donor key on an email link (?dk=b-22758-7cf7) is taken out of the address
+ * bar, kept with the visitor id and sent to WordPress (donorKeyUrl), which
+ * checks it against monday.com; it is never put on a donation link.
  */
 (function () {
 	'use strict';
@@ -258,10 +258,7 @@
 			var sig = [ views.length, last.id, last.active_time_ms, last.max_scroll_percent, ( this.data.donate_clicks || [] ).length, ( this.data.lead_forms || [] ).length ].join( '|' );
 			if ( sig === this.lastVisitSig ) return;
 			this.lastVisitSig = sig;
-			var body = this.visitorBody();
-			// The donor key goes to the Worker only: it alone can check it.
-			if ( this.data.dk && this.data.dk.key ) body.dk = this.data.dk.key;
-			var json = JSON.stringify( body );
+			var json = JSON.stringify( this.visitorBody() );
 			try {
 				fetch( VISITS_URL, {
 					method: 'POST',
@@ -279,21 +276,31 @@
 		}
 
 		/**
-		 * Ask WordPress to write this browser to monday.com now, rather than
-		 * on its next background run: the Worker has the donor key, and
-		 * WordPress takes the browser from the Worker. The key itself is not
-		 * sent here, since only the Worker can check it.
+		 * The donor key, to WordPress: it looks the key up in monday.com and,
+		 * when it is someone's, tells the Visits Worker and writes this
+		 * browser — its earlier visits too — at once. Sent after the Worker
+		 * has this page's visit, so the story WordPress fetches includes it.
+		 * Kept for the next page load until WordPress answers; a refusal
+		 * (other than "slow down") would be refused again, so it is not.
 		 */
 		postDonorKey() {
-			if ( ! DK_URL || ! this.data.id ) return;
+			var self = this;
+			var dk = this.data.dk;
+			if ( ! DK_URL || ! this.data.id || ! dk || ! dk.key ) return;
 			try {
 				fetch( DK_URL, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify( { visitor_id: this.data.id } ),
+					body: JSON.stringify( { visitor_id: this.data.id, dk: dk.key } ),
 					keepalive: true,
 					credentials: 'omit',
-				} ).catch( function () {} );
+				} ).then( function ( res ) {
+					if ( ! res || res.status >= 500 || res.status === 429 ) return;
+					if ( self.data.dk && self.data.dk.key === dk.key ) {
+						self.data.dk.sent = true;
+						self.saveData();
+					}
+				}, function () {} );
 			} catch ( e ) {}
 		}
 
@@ -361,12 +368,12 @@
 		}
 
 		/**
-		 * A donor key from an email link: ?dk=b-1234-1a2b names the donor (b-
-		 * their CRM account, m- their People item) with a short code only the
-		 * server can check. It is kept as given — the latest one — and sent
-		 * to the Visits Worker with each visit, and the Worker decides whether
-		 * it is real. Only a browser that runs this script gets here, so a
-		 * link scanner opening the email never counts as a click.
+		 * A donor key from an email link: ?dk=b-22758-7cf7 names the donor (b-
+		 * their CRM account, m- their People item), and the whole key is what
+		 * monday.com holds as their Donor key. It is kept as given — the
+		 * latest one — until WordPress has it, and WordPress decides whether
+		 * it is anyone's. Only a browser that runs this script gets here, so
+		 * a link scanner opening the email never counts as a click.
 		 *
 		 * The key is taken out of the address bar at once, every other
 		 * parameter left as it was, so a reload, a shared link or anything
@@ -386,7 +393,7 @@
 					window.history.replaceState( null, '', window.location.pathname + ( rest ? '?' + rest : '' ) + window.location.hash );
 				}
 				if ( ! DK_RE.test( dk ) ) return false;
-				this.data.dk = { key: dk, time: new Date().toISOString() };
+				this.data.dk = { key: dk, time: new Date().toISOString(), sent: false };
 				this.saveData();
 				return true;
 			} catch ( e ) {
@@ -1384,9 +1391,10 @@
 			// Anything an earlier page could not confirm it sent.
 			this.flushOutbox();
 
-			// A donor key just arrived: to the Worker now, not when the page is
-			// left, and once it has it, WordPress writes the browser at once.
-			if ( donorKey ) {
+			// A donor key just arrived (or WordPress never answered for one):
+			// this visit to the Worker now, not when the page is left, then the
+			// key to WordPress, which writes the browser at once.
+			if ( donorKey || ( this.data.dk && this.data.dk.key && ! this.data.dk.sent ) ) {
 				this.postVisit( function () {
 					self.postDonorKey();
 				} );
