@@ -225,7 +225,7 @@ function leadkit_monday_form_shortcode( $atts ) {
 		$fname = 'q[' . $q['id'] . ']';
 		$r     = $q['required'] ? ' required' : '';
 		$label = esc_html( $q['title'] ) . ( $q['required'] ? ' ' . $req : '' );
-		$help  = $q['description'] ? '<p class="' . $cls( '__help' ) . '">' . esc_html( $q['description'] ) . '</p>' : '';
+		$help  = $q['description'] ? '<p class="' . $cls( '__help' ) . '">' . esc_html( trim( wp_strip_all_tags( $q['description'] ) ) ) . '</p>' : '';
 		$ac    = leadkit_mform_autocomplete( $q );
 		$ac    = $ac ? ' autocomplete="' . esc_attr( $ac ) . '"' : '';
 		$slug  = sanitize_html_class( strtolower( $q['type'] ) );

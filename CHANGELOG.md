@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.9.2
+
+- **New donors matched by name when the email is new.** Before making a
+  person, the gift linker looks for exactly one person on People with the
+  gift's Donor name and no email yet (donors imported without one). That
+  person gets the gift and the email is saved to their row. Two with the
+  name, or one with a different email, still makes a new person.
+- **Form help text shows as text.** A question description that holds HTML
+  in monday.com no longer shows its tags: they are stripped, then escaped.
+
+## 1.9.1 / 1.9.0 / 1.8.x / 1.7.1
+
+See readme.txt; these shipped on task branches and are merged here.
+
 ## 1.8.1
 
 - **A new person is named from the gift's "Donor name"** column when the

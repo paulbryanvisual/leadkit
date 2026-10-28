@@ -201,6 +201,15 @@ campaign credited when the visitor came back from the donation host).
 
 == Changelog ==
 
+= 1.9.2 =
+* New donors: a gift whose email is on no one on People is now matched by
+  name first. Exactly one person with the gift's Donor name and no email yet
+  (an imported donor) gets the gift, and the email is saved to their row.
+  Two people with that name, or one with a different email, still makes a
+  new person, so no gift lands on the wrong donor.
+* Form help text: a question's description in monday.com that holds HTML
+  (<p>, <em>) now shows as plain text instead of the raw tags.
+
 = 1.9.1 =
 * Email clicks: an officer email's id on its link (utm_term e<date>-<time>)
   sets "Clicked" on that email's Emailed subitem, the first time the donor

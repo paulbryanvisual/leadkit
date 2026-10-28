@@ -25,7 +25,9 @@
  *   2. connects the gift's Visitor: the Visitors row with its visitorid;
  *   3. no Person some minutes after the gift arrived (Settings → LeadKit →
  *      Wait before making a donor, 10 by default; Zapier and the email match
- *      go first): finds the donor on People by email, or creates them — in
+ *      go first): finds the donor on People by email, else the one person
+ *      with the gift's Donor name and no email yet (saving the email to
+ *      their row), or creates them — in
  *      the group set for new people, named from the gift's Donor name (else
  *      the gift's own name), with its Donor phone, street and the like
  *      copied — and sets the gift's Person (a two-way column, so the
@@ -229,6 +231,40 @@ function leadkit_gift_donor_details( $g, $donor, $people ) {
 }
 
 /**
+ * The one person on People with exactly this name and no email yet — a donor
+ * imported without one (from Bloomerang, say) giving online for the first time.
+ * Two or more with that name, or one who has an email (a different address
+ * from the gift's, so maybe a different person), is no match: better a new row
+ * someone can merge than a gift on the wrong person.
+ *
+ * @param string $people   People board id.
+ * @param string $email_id People's Email column id.
+ * @param string $name     The donor's name, as given.
+ * @return array|null|false { id, name, url }; null for no match; false when
+ *                          monday.com could not be asked.
+ */
+function leadkit_gift_person_by_name( $people, $email_id, $name ) {
+	$name = trim( preg_replace( '/\s+/', ' ', (string) $name ) );
+	if ( '' === $name || false === strpos( $name, ' ' ) ) {
+		return null; // One word is too little to go on.
+	}
+	$res = leadkit_monday(
+		'query ($b: ID!, $v: [String]!, $c: [String!]) { items_page_by_column_values(board_id: $b, limit: 5, columns: [{column_id: "name", column_values: $v}]) { items { id name url column_values(ids: $c) { text } } } }',
+		array( 'b' => $people, 'v' => array( $name ), 'c' => array( $email_id ) )
+	);
+	if ( null === $res ) {
+		return false;
+	}
+	$items = (array) ( $res['items_page_by_column_values']['items'] ?? array() );
+	// monday.com's name match is loose about case and spaces; insist on the same name.
+	$items = array_values( array_filter( $items, fn( $it ) => 0 === strcasecmp( trim( preg_replace( '/\s+/', ' ', (string) $it['name'] ) ), $name ) ) );
+	if ( 1 !== count( $items ) || '' !== trim( (string) ( $items[0]['column_values'][0]['text'] ?? '' ) ) ) {
+		return null;
+	}
+	return array( 'id' => (string) $items[0]['id'], 'name' => (string) $items[0]['name'], 'url' => (string) $items[0]['url'] );
+}
+
+/**
  * One run of the linker.
  *
  * @return array What happened, for the checks: { looked, unpacked, visitors, linked, people, browsers }.
@@ -403,6 +439,25 @@ function leadkit_link_gifts() {
 				continue; // Could not ask: creating now could make a second person.
 			}
 			$hit = $found['items_page_by_column_values']['items'][0] ?? null;
+			// The person's name: the gift's "Donor name" when it has one
+			// (a gift named "Oct 24, 2026 – $50 – Jane Doe", say), else the
+			// gift's own name.
+			$named = array_search( 'name', $donor, true );
+			$given = false !== $named ? trim( (string) ( $g['text'][ $named ] ?? '' ) ) : '';
+			$name  = $given ?: $g['name'] ?: $g['email'];
+			// No one with that email: someone on People with the donor's name
+			// and no email yet (imported donors often have none) is them —
+			// connect the gift and save the email to their row. Only with a
+			// real Donor name, and only one such row; otherwise make someone.
+			if ( ! $hit && '' !== $given ) {
+				$hit = leadkit_gift_person_by_name( $people, $pcols['email'], $given );
+				if ( false === $hit ) {
+					continue; // Could not ask: creating now could make a second person.
+				}
+				if ( $hit && ! leadkit_visitor_set( $people, $hit['id'], array( $pcols['email'] => array( 'email' => $g['email'], 'text' => $g['email'] ) ) ) ) {
+					continue; // Their email could not be saved: try again next run.
+				}
+			}
 			if ( $hit ) {
 				$g['person'] = (string) $hit['id'];
 				$brief       = array( 'name' => (string) $hit['name'], 'url' => (string) $hit['url'] );
@@ -411,11 +466,6 @@ function leadkit_link_gifts() {
 				if ( null === $group ) {
 					continue;
 				}
-				// The person's name: the gift's "Donor name" when it has one
-				// (a gift named "Oct 24, 2026 – $50 – Jane Doe", say), else the
-				// gift's own name.
-				$named = array_search( 'name', $donor, true );
-				$name  = ( false !== $named ? trim( (string) ( $g['text'][ $named ] ?? '' ) ) : '' ) ?: $g['name'] ?: $g['email'];
 				$vars  = array(
 					'b' => $people,
 					'n' => $name,
