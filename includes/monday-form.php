@@ -199,7 +199,10 @@ function leadkit_monday_form_shortcode( $atts ) {
 		$title = $atts['success'] ?: ( $def['done_title'] ?: __( 'Thank you — we received your response.', 'leadkit' ) );
 		$out  .= '<div class="' . esc_attr( $p ) . '__message ' . esc_attr( $p ) . '__message--sent" id="leadkit-message" role="status">'
 			. '<p class="' . esc_attr( $p ) . '__message-title">' . esc_html( $title ) . '</p>'
-			. ( $def['done_text'] ? '<p class="' . esc_attr( $p ) . '__message-text">' . esc_html( $def['done_text'] ) . '</p>' : '' )
+			// The form's own thank-you text from monday.com is HTML (paragraphs,
+			// a newsletter link): shown as such, safe tags only, in a div so its
+			// paragraphs are not nested in one.
+			. ( $def['done_text'] ? '<div class="' . esc_attr( $p ) . '__message-text">' . wp_kses_post( $def['done_text'] ) . '</div>' : '' )
 			. '</div></form>';
 		return $out;
 	}
@@ -626,27 +629,53 @@ function leadkit_handle_monday_form( $req ) {
 					$details[ strtolower( trim( (string) ( $c['title'] ?? '' ) ) ) ] = (string) $values[ $cid ];
 				}
 			}
-			$person_id = leadkit_person_upsert(
-				array(
-					'board'   => $board,
-					'item_id' => $item_id,
-					'name'    => $item,
-					'email'   => $email,
-					'phone'   => $phone_val,
-					'visitor' => $visitor,
-					'summary' => $summary_data,
-					'form'    => $def['title'],
-					'details' => $details,
-				)
+			$person_args = array(
+				'board'   => $board,
+				'item_id' => $item_id,
+				'name'    => $item,
+				'email'   => $email,
+				'phone'   => $phone_val,
+				'visitor' => $visitor,
+				'summary' => $summary_data,
+				'form'    => $def['title'],
+				'details' => $details,
 			);
-		} elseif ( $email && $email_col ) {
-			leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visitor, $item );
-		}
-
-		// This browser's row on the Visitors board: the submission and the
-		// person connected to it. After the visitor is answered.
-		if ( $visitor && is_array( $decoded ) ) {
-			leadkit_queue_visitor( $visitor, $decoded, array( 'item' => $item_id, 'person' => $person_id, 'form' => $def['title'] ) );
+			$form_title  = $def['title'];
+			/*
+			 * The person and the browser's Visitors row after the visitor is
+			 * answered: together they are a dozen or more monday.com calls,
+			 * and someone who just pressed Submit should not wait half a
+			 * minute for them. The submission itself is already saved.
+			 */
+			add_action(
+				'shutdown',
+				function () use ( $person_args, $visitor, $decoded, $item_id, $form_title, $vtz ) {
+					if ( function_exists( 'fastcgi_finish_request' ) ) {
+						fastcgi_finish_request();
+					} elseif ( function_exists( 'litespeed_finish_request' ) ) {
+						litespeed_finish_request();
+					}
+					ignore_user_abort( true );
+					if ( function_exists( 'set_time_limit' ) ) {
+						@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+					}
+					leadkit_use_visitor_tz( $vtz );
+					$person_id = leadkit_person_upsert( $person_args );
+					// Queued at priority 90 of this same shutdown, so it runs next.
+					if ( $visitor && is_array( $decoded ) ) {
+						leadkit_queue_visitor( $visitor, $decoded, array( 'item' => $item_id, 'person' => $person_id, 'form' => $form_title ) );
+					}
+				},
+				80
+			);
+		} else {
+			if ( $email && $email_col ) {
+				leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visitor, $item );
+			}
+			// This browser's row on the Visitors board. After the visitor is answered.
+			if ( $visitor && is_array( $decoded ) ) {
+				leadkit_queue_visitor( $visitor, $decoded, array( 'item' => $item_id, 'person' => '', 'form' => $def['title'] ) );
+			}
 		}
 	}
 	if ( ! is_wp_error( $post_id ) && $email ) {

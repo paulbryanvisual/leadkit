@@ -201,6 +201,12 @@ campaign credited when the visitor came back from the donation host).
 
 == Changelog ==
 
+= 1.9.4 =
+* A form submission answers the visitor before the person and Visitors row
+  are written (was 28-30 seconds on 3sgf.org).
+* The form's thank-you text from monday.com shows as formatted text with its
+  links, not raw tags.
+
 = 1.9.3 =
 * Form submissions find or make their person on People even when People's
   Form submissions column does not allow that form's board; matched by email,

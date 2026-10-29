@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.4
+
+- **Submitting no longer takes half a minute.** The person on People and the
+  browser's Visitors row are written after the visitor is answered, as the
+  page subitems already were. Tested on 3sgf.org: 28-30 seconds before.
+- **The thank-you message shows its formatting.** The form's own
+  after-submission text from monday.com (paragraphs, a newsletter link) was
+  escaped and showed raw tags; it is now safe HTML in a div.
+
 ## 1.9.3
 
 - **Every form submission finds or makes its person on People, more reliably.**
