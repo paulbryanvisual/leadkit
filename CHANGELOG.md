@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.1
+
+- **Campaign total can count every row.** The rule `all` (or `*`) adds up
+  Amount on every row of the board, whatever its campaign: 3sgf.org counts
+  Light the Path and Break Free Run together. An empty rule is still an
+  error, with a message saying how to set it, so nothing counts everything
+  by accident. 11 more checks (58).
+
 ## 1.10.0
 
 - **A live campaign total on the site.** Settings → LeadKit → Campaign total:
