@@ -640,41 +640,29 @@ function leadkit_handle_monday_form( $req ) {
 				'form'    => $def['title'],
 				'details' => $details,
 			);
-			$form_title  = $def['title'];
 			/*
-			 * The person and the browser's Visitors row after the visitor is
-			 * answered: together they are a dozen or more monday.com calls,
-			 * and someone who just pressed Submit should not wait half a
-			 * minute for them. The submission itself is already saved.
+			 * The person and the browser's Visitors row in a request of their
+			 * own (includes/jobs.php): a dozen or more monday.com calls that
+			 * someone who just pressed Submit should not wait for. The
+			 * submission itself is already saved.
 			 */
-			add_action(
-				'shutdown',
-				function () use ( $person_args, $visitor, $decoded, $item_id, $form_title, $vtz ) {
-					if ( function_exists( 'fastcgi_finish_request' ) ) {
-						fastcgi_finish_request();
-					} elseif ( function_exists( 'litespeed_finish_request' ) ) {
-						litespeed_finish_request();
-					}
-					ignore_user_abort( true );
-					if ( function_exists( 'set_time_limit' ) ) {
-						@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
-					}
-					leadkit_use_visitor_tz( $vtz );
-					$person_id = leadkit_person_upsert( $person_args );
-					// Queued at priority 90 of this same shutdown, so it runs next.
-					if ( $visitor && is_array( $decoded ) ) {
-						leadkit_queue_visitor( $visitor, $decoded, array( 'item' => $item_id, 'person' => $person_id, 'form' => $form_title ) );
-					}
-				},
-				80
+			leadkit_defer(
+				'form_person',
+				array(
+					'person'    => $person_args,
+					'visitor'   => $visitor,
+					'analytics' => is_array( $decoded ) ? $decoded : null,
+					'item'      => $item_id,
+					'form'      => $def['title'],
+				)
 			);
 		} else {
 			if ( $email && $email_col ) {
 				leadkit_monday_link_person( $board, $item_id, $email, $email_col, $visitor, $item );
 			}
-			// This browser's row on the Visitors board. After the visitor is answered.
+			// This browser's row on the Visitors board, in a request of its own.
 			if ( $visitor && is_array( $decoded ) ) {
-				leadkit_queue_visitor( $visitor, $decoded, array( 'item' => $item_id, 'person' => '', 'form' => $def['title'] ) );
+				leadkit_defer( 'visitor', array( 'visitor' => $visitor, 'analytics' => $decoded, 'link' => array( 'item' => $item_id, 'person' => '', 'form' => $def['title'] ) ) );
 			}
 		}
 	}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.5
+
+- **The visitor is answered in seconds, really.** 1.9.4 still waited about
+  20 seconds on 3sgf.org: SiteGround does not let the answer go before PHP
+  finishes, whatever fastcgi_finish_request says. The person, the Visitors
+  row and the page subitems now run in a request of their own
+  (includes/jobs.php): a loopback to leadkit/v1/job that is not waited for,
+  with a WP-Cron event two minutes later as a backup. Each job runs once.
+
 ## 1.9.4
 
 - **Submitting no longer takes half a minute.** The person on People and the

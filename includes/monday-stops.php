@@ -48,23 +48,9 @@ function leadkit_monday_queue_stops( $item_id, $board, $summary ) {
 	}
 	$stops = array_slice( $summary['list'], 0, LEADKIT_STOPS_MAX );
 
-	add_action(
-		'shutdown',
-		function () use ( $item_id, $board, $stops ) {
-			// Answer the visitor first; the rest happens on its own time.
-			if ( function_exists( 'fastcgi_finish_request' ) ) {
-				fastcgi_finish_request();
-			} elseif ( function_exists( 'litespeed_finish_request' ) ) {
-				litespeed_finish_request();
-			}
-			ignore_user_abort( true );
-			if ( function_exists( 'set_time_limit' ) ) {
-				@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
-			}
-			leadkit_monday_add_stops( $item_id, $board, $stops );
-		},
-		100
-	);
+	// In a request of its own (includes/jobs.php): a minute of screenshots
+	// must not keep the visitor waiting.
+	leadkit_defer( 'stops', array( 'item' => $item_id, 'board' => $board, 'stops' => $stops ) );
 }
 
 /**

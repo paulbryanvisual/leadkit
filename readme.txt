@@ -201,6 +201,11 @@ campaign credited when the visitor came back from the donation host).
 
 == Changelog ==
 
+= 1.9.5 =
+* Work after a form submission (person, Visitors row, page subitems) runs in
+  a background request of its own, so hosts that hold the answer until PHP
+  finishes no longer keep the visitor waiting.
+
 = 1.9.4 =
 * A form submission answers the visitor before the person and Visitors row
   are written (was 28-30 seconds on 3sgf.org).
