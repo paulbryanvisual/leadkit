@@ -138,6 +138,11 @@ add_action(
 						'visits_url'        => leadkit_clean_visits_url( $raw['visits_url'] ?? '' ),
 						'visits_secret'     => leadkit_keep_secret( $raw['visits_secret'] ?? '', 'visits_secret' ),
 						'background_minutes' => '5' === (string) ( $raw['background_minutes'] ?? '' ) ? '5' : '15',
+						'total_on'          => empty( $raw['total_on'] ) ? '' : '1',
+						// "Column title = Label"; one side only means the same for both.
+						'total_rule'        => sanitize_text_field( $raw['total_rule'] ?? '' ),
+						'total_goal'        => (string) max( 0, (int) round( (float) preg_replace( '/[^0-9.]/', '', (string) ( $raw['total_goal'] ?? '' ) ) ) ) ?: '',
+						'total_board'       => preg_match( '/\d{5,}/', (string) ( $raw['total_board'] ?? '' ), $tb ) ? $tb[0] : '',
 						// Paths, each with slashes both ends: "/help/". A lone "/" is everything.
 						'untracked_paths'   => implode( ', ', array_unique( array_filter( array_map( function ( $p ) {
 							$p = preg_replace( '#[^a-z0-9/._~%-]#', '', (string) wp_parse_url( strtolower( trim( (string) $p ) ), PHP_URL_PATH ) );
@@ -207,6 +212,10 @@ function leadkit_render_settings_page() {
 		'visits_url'        => array( __( 'Visits Worker URL', 'leadkit' ), __( 'Optional, with a Visitors board. The Cloudflare Worker that keeps every browser\'s visits in D1, e.g. https://visits.example.org. The tracker posts every visit straight to it, anonymous visitors included, so none of that traffic or data touches WordPress. A browser\'s visits stay there until it reaches a goal: by default a Donate click or a form (the Worker\'s WARM_RULES setting can add returning visitors or campaign arrivals). Each background run LeadKit fetches those browsers and writes them to the Visitors and Visits boards with their whole history, earlier anonymous visits included. Empty turns it off. Make sure the privacy policy says the site keeps visit history per browser.', 'leadkit' ) ),
 		'visits_secret'     => array( __( 'Visits Worker secret', 'leadkit' ), __( 'The Worker\'s SYNC_SECRET. Better in wp-config.php as LEADKIT_VISITS_SECRET, which takes precedence. Never shown again once saved; leave empty to keep it, a single - clears it.', 'leadkit' ), 'secret' ),
 		'background_minutes' => array( __( 'Background runs', 'leadkit' ), __( 'How often the gift linker and the warm-browser sender run. WordPress starts them on the first page visit after each is due, so on a quiet site they run late; a real cron calling wp-cron.php at the same interval keeps them on time. Every 5 minutes makes about three times as many monday.com API calls.', 'leadkit' ), 'select', array( '15' => __( 'Every 15 minutes', 'leadkit' ), '5' => __( 'Every 5 minutes', 'leadkit' ) ) ),
+		'total_on'          => array( __( 'Campaign total', 'leadkit' ), __( 'A live fundraising total for the site: each background run adds up Amount on the rows of the Donations board that match the rule below, and [leadkit_total] shows it (with a progress bar toward the goal; [leadkit_total field="total"] for one number). Read only — nothing is written to monday.com. Settings → Campaign total shows the live numbers and has a manual override.', 'leadkit' ), 'checkbox' ),
+		'total_rule'        => array( __( 'Campaign total rule', 'leadkit' ), __( 'Which rows count: a column title, =, and the label it must read, e.g. EOY 2026 = EOY 2026. Rows whose Entry column reads Match dollars are shown as the match share; Match dollars and Offline lump sum rows count toward the total but not the gift count.', 'leadkit' ) ),
+		'total_goal'        => array( __( 'Campaign goal ($)', 'leadkit' ), __( 'The goal the progress bar and percent are measured against, e.g. 200000.', 'leadkit' ) ),
+		'total_board'       => array( __( 'Campaign total board', 'leadkit' ), __( 'Optional. A board id to add up instead of the Donations board.', 'leadkit' ) ),
 		'untracked_paths'   => array( __( 'Untracked pages', 'leadkit' ), __( 'Paths where nothing is tracked and nothing is sent — pages someone at risk might use, like /help/. Comma-separated; each covers the pages under it (/help/ covers /help/hotline/ but not /helpful/). The tracker is not loaded there at all, and those pages are dropped from anything a browser recorded there before.', 'leadkit' ) ),
 		'storage_prefix'    => array( __( 'Storage prefix', 'leadkit' ), __( 'Prefix for the tracker’s localStorage keys. Change per project if endpoints are shared.', 'leadkit' ) ),
 	);

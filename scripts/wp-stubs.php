@@ -60,6 +60,9 @@ function remove_all_actions( $hook ) {
 	unset( $GLOBALS['lk_actions'][ $hook ] );
 }
 function add_shortcode() {}
+function shortcode_atts( $pairs, $atts, $tag = '' ) {
+	return array_merge( $pairs, array_intersect_key( (array) $atts, $pairs ) );
+}
 function register_post_type() {}
 function get_posts( $args = array() ) {
 	return array();
@@ -194,6 +197,10 @@ class WP_REST_Response {
 	}
 	public function get_status() {
 		return $this->status;
+	}
+	public $headers = array();
+	public function header( $k, $v ) {
+		$this->headers[ $k ] = $v;
 	}
 }
 class WP_REST_Request {
@@ -396,6 +403,28 @@ class LkMonday {
 				$out[] = array( 'id' => (string) $id, 'name' => $it['name'], 'created_at' => $it['created_at'] ?? gmdate( 'c' ), 'column_values' => $cvs );
 			}
 			return array( 'data' => array( 'boards' => array( array( 'items_page' => array( 'items' => $out ) ) ) ) );
+		}
+		// Every item on a board, a page at a time, followed by cursor (the
+		// campaign total). The cursor is just the next offset.
+		if ( false !== strpos( $q, 'items_page(limit: $l)' ) || false !== strpos( $q, 'next_items_page' ) ) {
+			$next = false !== strpos( $q, 'next_items_page' );
+			list( $b, $from ) = $next ? explode( ':', $v['k'] ) : array( (string) $v['b'][0], 0 );
+			if ( ! isset( self::$boards[ $b ] ) ) {
+				return array( 'data' => array( 'boards' => array() ) );
+			}
+			$all = array_slice( self::$boards[ $b ]['items'], (int) $from, (int) $v['l'], true );
+			$out = array();
+			foreach ( $all as $it ) {
+				$cvs = array();
+				foreach ( $v['c'] as $c ) {
+					$val   = $it['values'][ $c ] ?? null;
+					$cvs[] = array( 'id' => $c, 'text' => null === $val ? null : self::text( $val ) );
+				}
+				$out[] = array( 'column_values' => $cvs );
+			}
+			$end    = (int) $from + (int) $v['l'];
+			$page   = array( 'cursor' => $end < count( self::$boards[ $b ]['items'] ) ? "$b:$end" : null, 'items' => $out );
+			return array( 'data' => $next ? array( 'next_items_page' => $page ) : array( 'boards' => array( array( 'items_page' => $page ) ) ) );
 		}
 		if ( false !== strpos( $q, 'items(ids: $i) { id name url board { id } }' ) ) {
 			$out = array();
