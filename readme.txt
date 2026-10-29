@@ -201,6 +201,13 @@ campaign credited when the visitor came back from the donation host).
 
 == Changelog ==
 
+= 1.9.3 =
+* Form submissions find or make their person on People even when People's
+  Form submissions column does not allow that form's board; matched by email,
+  else by name with no email yet; new people go in "New from website forms"
+  (or the group set); a new person gets the form's address; a form with
+  First/Last Name questions names the person from them.
+
 = 1.9.2 =
 * New donors: a gift whose email is on no one on People is now matched by
   name first. Exactly one person with the gift's Donor name and no email yet

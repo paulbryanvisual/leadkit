@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.9.3
+
+- **Every form submission finds or makes its person on People, more reliably.**
+  The submission's "Form submissions" link is now written on its own after
+  the person is made, so a form board that column does not allow no longer
+  stops the person being made (which is what kept volunteers off People).
+- **Matched by name when the email is new:** one person with the same name
+  and no email yet gets the submission, and the email is saved to them.
+- **New people go in a group:** Settings → LeadKit → Group for new people
+  from forms, else a group titled "New from website forms", else the top group.
+- **Address copied to a new person:** Street Address, City,
+  Region/State/Province and Postal/Zip Code to Street, City, State and Zip.
+- **Named from First Name + Last Name** when a form has no Name question
+  (they were "New response").
+- **Submitter's name column is "Full name"**: "Name" matched the board's own
+  item name column, so the name was never saved on the submission.
+
 ## 1.9.2
 
 - **New donors matched by name when the email is new.** Before making a

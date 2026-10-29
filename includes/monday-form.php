@@ -479,6 +479,19 @@ function leadkit_handle_monday_form( $req ) {
 		}
 	}
 
+	// No Name question: First Name and Last Name questions make the name.
+	if ( '' === $item ) {
+		$parts = array();
+		foreach ( array( 'first name', 'last name' ) as $want ) {
+			foreach ( $def['questions'] as $q ) {
+				if ( $want === strtolower( trim( (string) $q['title'] ) ) && is_scalar( $values[ $q['id'] ] ?? null ) ) {
+					$parts[] = trim( (string) $values[ $q['id'] ] );
+					break;
+				}
+			}
+		}
+		$item = mb_substr( trim( implode( ' ', array_filter( $parts ) ) ), 0, 255 );
+	}
 	$item = $item ?: __( 'New response', 'leadkit' );
 
 	// ---- store first ----------------------------------------------------------
@@ -544,7 +557,7 @@ function leadkit_handle_monday_form( $req ) {
 	 */
 	$row_name = $item;
 	if ( leadkit_monday_people_board() ) {
-		$ncol = leadkit_monday_ensure_columns( $board, array( 'name' => array( 'Name', 'text' ) ), 'subname' );
+		$ncol = leadkit_monday_ensure_columns( $board, array( 'name' => array( 'Full name', 'text' ) ), 'subname2' );
 		if ( $ncol ) {
 			$values[ $ncol['name'] ] = mb_substr( $item, 0, 255 );
 			$short    = trim( preg_replace( '/\s*\([^)]*\)\s*$/', '', $def['title'] ) ) ?: $def['title'];
@@ -607,6 +620,12 @@ function leadkit_handle_monday_form( $req ) {
 					break;
 				}
 			}
+			$details = array();
+			foreach ( $def['columns'] as $cid => $c ) {
+				if ( isset( $values[ $cid ] ) && is_scalar( $values[ $cid ] ) ) {
+					$details[ strtolower( trim( (string) ( $c['title'] ?? '' ) ) ) ] = (string) $values[ $cid ];
+				}
+			}
 			$person_id = leadkit_person_upsert(
 				array(
 					'board'   => $board,
@@ -617,6 +636,7 @@ function leadkit_handle_monday_form( $req ) {
 					'visitor' => $visitor,
 					'summary' => $summary_data,
 					'form'    => $def['title'],
+					'details' => $details,
 				)
 			);
 		} elseif ( $email && $email_col ) {

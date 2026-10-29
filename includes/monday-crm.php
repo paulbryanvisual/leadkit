@@ -258,6 +258,60 @@ function leadkit_person_link( $brief ) {
 }
 
 /**
+ * The People group a person made from a form goes in: Settings → LeadKit →
+ * Group for new people from forms (title or id), else a group titled "New from
+ * website forms", else monday.com's own choice (the top group).
+ *
+ * @param string $people People board id.
+ * @return string Group id, or ''.
+ */
+function leadkit_form_people_group( $people ) {
+	$want   = trim( (string) ( leadkit_options()['people_form_group'] ?? '' ) ) ?: 'New from website forms';
+	$groups = leadkit_monday_groups( $people );
+	foreach ( (array) $groups as $id => $title ) {
+		if ( (string) $id === $want || 0 === strcasecmp( trim( (string) $title ), $want ) ) {
+			return (string) $id;
+		}
+	}
+	return '';
+}
+
+/**
+ * A form submission's address and the like, as the People board's own
+ * columns: Street Address to Street, Region/State/Province to State,
+ * Postal/Zip Code to Zip, City to City — text columns of those titles that
+ * the People board has. Only for a person LeadKit makes; an existing
+ * person's details are theirs to keep.
+ *
+ * @param string $people  People board id.
+ * @param array  $details Lowercase form column title => text.
+ * @return array Column values.
+ */
+function leadkit_person_details( $people, $details ) {
+	$same = array(
+		'street address'        => 'street',
+		'address'               => 'street',
+		'street'                => 'street',
+		'city'                  => 'city',
+		'region/state/province' => 'state',
+		'state'                 => 'state',
+		'postal/zip code'       => 'zip',
+		'zip code'              => 'zip',
+		'zip'                   => 'zip',
+	);
+	$to  = $details ? leadkit_monday_board_columns( $people ) : null;
+	$out = array();
+	foreach ( (array) $details as $title => $text ) {
+		$col  = $to[ $same[ $title ] ?? '' ] ?? null;
+		$text = trim( (string) $text );
+		if ( $col && 'text' === $col['type'] && '' !== $text && ! isset( $out[ $col['id'] ] ) ) {
+			$out[ $col['id'] ] = mb_substr( $text, 0, 2000 );
+		}
+	}
+	return $out;
+}
+
+/**
  * Find the person by email, or create them; connect the submission; roll up.
  *
  * @param array $args {
@@ -269,6 +323,7 @@ function leadkit_person_link( $brief ) {
  *     @type string $visitor  Browser visitor id.
  *     @type array  $summary  leadkit_journey_summary() result, or null.
  *     @type string $form     Form title.
+ *     @type array  $details  Lowercase form column title => text, for a new person.
  * }
  * @return string Person item id, or ''.
  */
@@ -292,7 +347,27 @@ function leadkit_person_upsert( $args ) {
 			'r' => array( $cols['ids'], $cols['forms'], $cols['level'], $cols['first'], $cols['fsrc'] ),
 		)
 	);
+	if ( null === $found ) {
+		return ''; // Could not ask: making someone now could make a second person.
+	}
 	$person = $found['items_page_by_column_values']['items'][0] ?? null;
+	$by_name = false;
+	// No one with that email: the one person with this name and no email yet
+	// (a donor imported without one, say) is them. Their email is saved below.
+	if ( ! $person && function_exists( 'leadkit_gift_person_by_name' ) ) {
+		$hit = leadkit_gift_person_by_name( $people, $cols['email'], (string) $args['name'] );
+		if ( false === $hit ) {
+			return '';
+		}
+		if ( $hit ) {
+			$again   = leadkit_monday(
+				'query ($i: [ID!], $r: [String!]) { items(ids: $i) { id url column_values(ids: $r) { id text ... on BoardRelationValue { linked_item_ids } } } }',
+				array( 'i' => array( $hit['id'] ), 'r' => array( $cols['ids'], $cols['forms'], $cols['level'], $cols['first'], $cols['fsrc'] ) )
+			);
+			$person  = $again['items'][0] ?? null;
+			$by_name = (bool) $person;
+		}
+	}
 
 	$today  = leadkit_vdate( 'Y-m-d' );
 	$level  = $args['summary']['level'] ?? '';
@@ -305,8 +380,7 @@ function leadkit_person_upsert( $args ) {
 			$cols['count'] => '1',
 			$cols['first'] => array( 'date' => $today ),
 			$cols['last']  => array( 'date' => $today ),
-			$cols['forms'] => array( 'item_ids' => array( (int) $args['item_id'] ) ),
-		);
+		) + leadkit_person_details( $people, $args['details'] ?? array() );
 		if ( ! empty( $args['phone'] ) ) {
 			$values[ $cols['phone'] ] = $args['phone'];
 		}
@@ -320,11 +394,24 @@ function leadkit_person_upsert( $args ) {
 		if ( $args['visitor'] ) {
 			$values[ $cols['ids'] ] = array( 'text' => $args['visitor'] );
 		}
+		$group     = leadkit_form_people_group( $people );
+		$vars      = array( 'b' => $people, 'n' => $args['name'] ?: $email, 'v' => wp_json_encode( $values ) );
+		if ( $group ) {
+			$vars['g'] = $group;
+		}
 		$made      = leadkit_monday(
-			'mutation ($b: ID!, $n: String!, $v: JSON) { create_item(board_id: $b, item_name: $n, column_values: $v) { id url } }',
-			array( 'b' => $people, 'n' => $args['name'] ?: $email, 'v' => wp_json_encode( $values ) )
+			'mutation ($b: ID!, $n: String!, $v: JSON' . ( $group ? ', $g: String' : '' ) . ') { create_item(board_id: $b, item_name: $n, column_values: $v' . ( $group ? ', group_id: $g' : '' ) . ') { id url } }',
+			$vars
 		);
 		$person_id = (string) ( $made['create_item']['id'] ?? '' );
+		if ( $person_id ) {
+			// Its Form submissions, on its own: a form board that column does
+			// not allow is refused, and must not stop the person being made.
+			leadkit_monday(
+				'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
+				array( 'i' => $person_id, 'b' => $people, 'v' => wp_json_encode( array( $cols['forms'] => array( 'item_ids' => array( (int) $args['item_id'] ) ) ) ) )
+			);
+		}
 		$brief     = $person_id ? array( 'name' => $args['name'] ?: $email, 'url' => (string) ( $made['create_item']['url'] ?? '' ) ) : null;
 		$is_new    = true;
 	} else {
@@ -347,10 +434,12 @@ function leadkit_person_upsert( $args ) {
 
 		$values = array(
 			$cols['ids']   => array( 'text' => implode( "\n", $ids ) ),
-			$cols['forms'] => array( 'item_ids' => $linked ),
 			$cols['count'] => (string) count( $linked ),
 			$cols['last']  => array( 'date' => $today ),
 		);
+		if ( $by_name ) {
+			$values[ $cols['email'] ] = array( 'email' => $email, 'text' => $email );
+		}
 		// Engagement is their best ever, not their latest.
 		if ( $level && ( LEADKIT_LEVELS[ $level ] ?? 0 ) > ( LEADKIT_LEVELS[ $had ] ?? 0 ) ) {
 			$values[ $cols['level'] ] = array( 'label' => $level );
@@ -370,6 +459,11 @@ function leadkit_person_upsert( $args ) {
 		leadkit_monday(
 			'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
 			array( 'i' => $person_id, 'b' => $people, 'v' => wp_json_encode( $values ) )
+		);
+		// Form submissions on its own, for the same reason as above.
+		leadkit_monday(
+			'mutation ($i: ID!, $b: ID!, $v: JSON!) { change_multiple_column_values(item_id: $i, board_id: $b, column_values: $v) { id } }',
+			array( 'i' => $person_id, 'b' => $people, 'v' => wp_json_encode( array( $cols['forms'] => array( 'item_ids' => $linked ) ) ) )
 		);
 	}
 	if ( ! $person_id ) {
