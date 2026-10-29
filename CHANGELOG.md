@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.10.0
+
+- **A live campaign total on the site.** Settings → LeadKit → Campaign total:
+  each background run adds up Amount on the Donations board's rows whose rule
+  column reads the label (on 3sgf.org, "EOY 2026 = EOY 2026"), and
+  `[leadkit_total]` shows it as a card with a progress bar toward the goal,
+  the match share in gold and the gift count (`[eoy_total]` works too;
+  `field="total"` and friends give one number inline). Match dollars and
+  Offline lump sum rows count toward the total but not the gift count.
+  Read only: columns are found by title, never created, nothing written.
+- **Never $0 by accident.** Any failed pull, a later page included, keeps the
+  last good total; a site that has never pulled shows a dash. No goal set
+  shows no percent rather than a made-up 100%.
+- **Cache-proof.** The card refreshes from `leadkit/v1/total` (totals only,
+  cached 5 minutes) so a page from SiteGround's cache shows the latest number.
+- **Settings → Campaign total**: the live numbers, last error, Pull now, and
+  a manual override for when monday.com or Zapier is what's broken — it
+  switches itself off at a set time, and every change is logged.
+- `scripts/check-campaign-total.php` (47 checks); the fake monday.com in
+  `scripts/wp-stubs.php` now pages through a board by cursor.
+
 ## 1.9.5
 
 - **The visitor is answered in seconds, really.** 1.9.4 still waited about

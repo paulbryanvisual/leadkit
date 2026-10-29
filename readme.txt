@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.9.0
+Stable tag: 1.10.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -200,6 +200,12 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.10.0 =
+* Campaign total: a live fundraising total from the Donations board,
+  shown with [leadkit_total] (or [eoy_total]) and served at leadkit/v1/total.
+  Read only; keeps the last good total on any failure; manual override
+  under Settings → Campaign total.
 
 = 1.9.5 =
 * Work after a form submission (person, Visitors row, page subitems) runs in

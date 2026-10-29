@@ -3,7 +3,7 @@
  * Plugin Name:       LeadKit — Lead Form & Visitor Tracking
  * Plugin URI:        https://github.com/paulbryanvisual/leadkit
  * Description:       The lead-capture form and first-party visitor tracker, packaged to travel between projects. Renders the form anywhere (template tag or shortcode), lazy-mounts Cloudflare Turnstile, and ships the analytics tracker that attaches behavioural context to every lead.
- * Version:           1.9.5
+ * Version:           1.10.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Paul Bryan, PrettyGrand.com
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LEADKIT_VERSION', '1.9.5' );
+define( 'LEADKIT_VERSION', '1.10.0' );
 define( 'LEADKIT_DIR', __DIR__ );
 define( 'LEADKIT_URL', plugin_dir_url( __FILE__ ) );
 
@@ -52,6 +52,7 @@ require_once LEADKIT_DIR . '/includes/donor-keys.php';
 require_once LEADKIT_DIR . '/includes/email-clicks.php';
 require_once LEADKIT_DIR . '/includes/gifts.php';
 require_once LEADKIT_DIR . '/includes/monday-form.php';
+require_once LEADKIT_DIR . '/includes/campaign-total.php';
 
 /**
  * One option, one array — portable and easy to export between installs.
@@ -82,6 +83,12 @@ function leadkit_options() {
 		'visits_secret'     => '',
 		// The gift linker's and the warm-browser sender's schedule (minutes).
 		'background_minutes' => '15',
+		// Campaign total: on/off, "Column title = Label", goal ($), and an
+		// optional board of its own (empty = the Donations board).
+		'total_on'          => '',
+		'total_rule'        => '',
+		'total_goal'        => '',
+		'total_board'       => '',
 		'untracked_paths'   => '',
 		'notify_returns'    => '',
 		'turnstile_sitekey' => '',
@@ -129,6 +136,7 @@ register_deactivation_hook(
 	function () {
 		wp_clear_scheduled_hook( 'leadkit_link_gifts' );
 		wp_clear_scheduled_hook( 'leadkit_send_warm' );
+		wp_clear_scheduled_hook( 'leadkit_campaign_total' );
 	}
 );
 
