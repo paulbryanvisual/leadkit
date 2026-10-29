@@ -10,7 +10,8 @@
  * failure, a later page included, keeps the last good total; never pulled
  * shows a dash, never $0; no goal shows no percent; the override wins, then
  * switches itself off and is logged; the card, inline fields and REST
- * payload carry totals only.
+ * payload carry totals only; the rule "all" counts every row, and an empty
+ * rule is an error rather than everything.
  *
  *   php scripts/check-campaign-total.php
  *
@@ -188,5 +189,33 @@ lk_eq( leadkit_total_shortcode( array( 'field' => 'total' ) ), '<span class="lkt
 lk_ok( false === strpos( $html, 'Jane' ), 'no donor name anywhere in the card' );
 $json = json_encode( leadkit_total_payload() );
 lk_ok( false === strpos( $json, 'Jane' ) && false !== strpos( $json, '"total":120500' ), 'REST payload: totals only', $json );
+
+// ---- "all": every row on the board -------------------------------------------------------
+foreach ( array( 'all', 'ALL', '*' ) as $all ) {
+	lkt_setup( array( 'total_rule' => $all ) );
+	lkt_board(
+		array(
+			array( 'Light the Path', '1' ),
+			array( 'Light the Path', '79500', 'Match dollars' ),
+			array( 'Light the Path', null, 'Offline lump sum' ),
+			array( 'Break Free Run', '1151' ),
+			array( '', '25' ),                               // No campaign set: still a donation.
+		)
+	);
+	lk_ok( leadkit_total_pull(), "rule \"$all\": pull succeeds" );
+	$s = get_option( LEADKIT_TOTAL_STATE );
+	lk_eq( array( (float) $s['total'], (float) $s['match'], $s['gifts'], $s['rows'] ), array( 80677.0, 79500.0, 3, 5 ), "rule \"$all\": every row counted (1 + 79,500 + 0 + 1,151 + 25)" );
+}
+lk_ok( ! preg_match( '/color_eoy/', json_encode( end( LkMonday::$calls )['v'] ) ), 'rule "all" does not ask for the campaign column' );
+// "all" with no Entry column: still every row, all gifts.
+unset( LkMonday::$boards[ DB ]['cols']['color_entry'] );
+lk_ok( leadkit_total_pull(), 'rule "all", no Entry column: pulls' );
+lk_eq( get_option( LEADKIT_TOTAL_STATE )['gifts'], 5, 'rule "all", no Entry column: every row a gift' );
+
+// An empty rule is an error with a clear message, never "everything".
+lkt_setup( array( 'total_rule' => '' ) );
+lkt_board( array( array( 'EOY 2026', '10' ) ) );
+lk_ok( ! leadkit_total_pull(), 'empty rule: fails' );
+lk_ok( false !== strpos( (string) get_option( LEADKIT_TOTAL_ERROR ), 'or "all" for every row' ), 'empty rule: says how to set it', get_option( LEADKIT_TOTAL_ERROR ) );
 
 lk_done();

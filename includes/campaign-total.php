@@ -4,7 +4,7 @@
  *
  * Each background run (the same 15- or 5-minute schedule as the gift linker)
  * adds up Amount on every Donations row whose rule column reads the campaign
- * label — on 3sgf.org, "EOY 2026" = "EOY 2026" — and keeps the result. The
+ * label (or every row, with the rule "all") and keeps the result. The
  * site shows it with [leadkit_total] (alias [eoy_total]) and serves it at
  * leadkit/v1/total, so a page from SiteGround's cache still refreshes.
  *
@@ -68,11 +68,15 @@ function leadkit_total_enabled() {
  */
 function leadkit_total_rule() {
 	$o    = leadkit_options();
-	$rule = (string) ( $o['total_rule'] ?? '' );
-	list( $col, $label ) = array_map( 'trim', array_pad( explode( '=', $rule, 2 ), 2, '' ) );
+	$rule = trim( (string) ( $o['total_rule'] ?? '' ) );
+	// "all" (or "*") counts every row on the board. Said out loud on purpose:
+	// an empty rule is still an error, so nobody counts everything by accident.
+	$all = in_array( strtolower( $rule ), array( 'all', '*' ), true );
+	list( $col, $label ) = $all ? array( '', '' ) : array_map( 'trim', array_pad( explode( '=', $rule, 2 ), 2, '' ) );
 	return (array) apply_filters(
 		'leadkit/campaign_total_columns',
 		array(
+			'all'         => $all,
 			'amount'      => 'Amount',
 			'rule'        => $col,
 			'label'       => '' !== $label ? $label : $col,
@@ -108,10 +112,13 @@ function leadkit_total_columns( $board, $r ) {
 		$by_title[ strtolower( trim( (string) $c['title'] ) ) ] = (string) $c['id'];
 	}
 	$cols = array();
-	foreach ( array( 'amount', 'rule', 'entry' ) as $slot ) {
+	foreach ( empty( $r['all'] ) ? array( 'amount', 'rule', 'entry' ) : array( 'amount', 'entry' ) as $slot ) {
 		$id = $by_title[ strtolower( (string) $r[ $slot ] ) ] ?? '';
 		if ( '' === $id && 'entry' !== $slot ) {
-			update_option( LEADKIT_TOTAL_ERROR, sprintf( 'No column titled "%s" on board %s', $r[ $slot ], $board ), false );
+			$msg = 'rule' === $slot && '' === (string) $r['rule']
+				? 'Set a Campaign total rule in Settings → LeadKit: "Column = Label", or "all" for every row'
+				: sprintf( 'No column titled "%s" on board %s', $r[ $slot ], $board );
+			update_option( LEADKIT_TOTAL_ERROR, $msg, false );
 			return null;
 		}
 		if ( '' !== $id ) {
@@ -148,7 +155,7 @@ function leadkit_total_add( array $items, array $cols, array $r, array $sum ) {
 		foreach ( (array) ( $item['column_values'] ?? array() ) as $cv ) {
 			$t[ $cv['id'] ?? '' ] = trim( (string) ( $cv['text'] ?? '' ) );
 		}
-		if ( ( $t[ $cols['rule'] ] ?? '' ) !== $r['label'] ) {
+		if ( empty( $r['all'] ) && ( $t[ $cols['rule'] ] ?? '' ) !== $r['label'] ) {
 			continue;
 		}
 		$amount = leadkit_total_amount( $t[ $cols['amount'] ] ?? '' );
@@ -524,7 +531,7 @@ function leadkit_total_render_page() {
 	<?php endif; ?>
 
 	<p>
-		<?= esc_html( sprintf( 'Board %s · adds up "%s" where "%s" is "%s" · goal %s', leadkit_total_board() ?: '—', $r['amount'], $r['rule'] ?: '—', $r['label'] ?: '—', $money( $r['goal'] ) ) ) ?>
+		<?= esc_html( empty( $r['all'] ) ? sprintf( 'Board %s · adds up "%s" where "%s" is "%s" · goal %s', leadkit_total_board() ?: '—', $r['amount'], $r['rule'] ?: '—', $r['label'] ?: '—', $money( $r['goal'] ) ) : sprintf( 'Board %s · adds up "%s" on every row · goal %s', leadkit_total_board() ?: '—', $r['amount'], $money( $r['goal'] ) ) ) ?>
 		· <?= esc_html__( 'shortcode', 'leadkit' ) ?> <code>[leadkit_total]</code>
 	</p>
 

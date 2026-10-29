@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.10.0
+Stable tag: 1.10.1
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -200,6 +200,9 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.10.1 =
+* Campaign total rule "all" counts every row on the board.
 
 = 1.10.0 =
 * Campaign total: a live fundraising total from the Donations board,
