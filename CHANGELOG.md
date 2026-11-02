@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.11.0
+
+- **A People group per form.** `[leadkit_monday_form … people_group="Gala interest"]`
+  puts the people that form makes in their own group on the People board
+  (its title as the board shows it, or its id). It wins over Settings →
+  LeadKit → Group for new people from forms, which still covers every form
+  without one. The group is kept on the server by board when the shortcode
+  renders, never taken from the submission; a group the board doesn't have
+  is passed over, so the person is still made. Existing people keep their
+  group.
+
 ## 1.10.1
 
 - **Campaign total can count every row.** The rule `all` (or `*`) adds up

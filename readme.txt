@@ -3,7 +3,7 @@ Contributors: paulbryanvisual
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.10.1
+Stable tag: 1.11.0
 License: GPL-2.0-or-later
 
 The lead-capture form and first-party visitor tracker, packaged to travel
@@ -200,6 +200,12 @@ campaign credited when the visitor came back from the donation host).
   domain during development.
 
 == Changelog ==
+
+= 1.11.0 =
+* A People group per form: people_group="…" on [leadkit_monday_form] puts the
+  people that form makes in their own People group (title or id), ahead of
+  Settings → Group for new people from forms. Kept on the server by board, not
+  taken from the submission; a group the board lacks is passed over.
 
 = 1.10.1 =
 * Campaign total rule "all" counts every row on the board.

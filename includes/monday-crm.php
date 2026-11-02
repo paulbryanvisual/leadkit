@@ -258,19 +258,27 @@ function leadkit_person_link( $brief ) {
 }
 
 /**
- * The People group a person made from a form goes in: Settings → LeadKit →
- * Group for new people from forms (title or id), else a group titled "New from
- * website forms", else monday.com's own choice (the top group).
+ * The People group a person made from a form goes in: the form's own group
+ * (people_group="…" on [leadkit_monday_form]) when the board has it, else
+ * Settings → LeadKit → Group for new people from forms (title or id), else a
+ * group titled "New from website forms", else monday.com's own choice (the
+ * top group). A group that is not on the board is passed over, so the person
+ * is still made.
  *
  * @param string $people People board id.
+ * @param string $form   The form's own group ('' for none).
  * @return string Group id, or ''.
  */
-function leadkit_form_people_group( $people ) {
-	$want   = trim( (string) ( leadkit_options()['people_form_group'] ?? '' ) ) ?: 'New from website forms';
+function leadkit_form_people_group( $people, $form = '' ) {
 	$groups = leadkit_monday_groups( $people );
-	foreach ( (array) $groups as $id => $title ) {
-		if ( (string) $id === $want || 0 === strcasecmp( trim( (string) $title ), $want ) ) {
-			return (string) $id;
+	foreach ( array( trim( (string) $form ), trim( (string) ( leadkit_options()['people_form_group'] ?? '' ) ) ?: 'New from website forms' ) as $want ) {
+		if ( '' === $want ) {
+			continue;
+		}
+		foreach ( (array) $groups as $id => $title ) {
+			if ( (string) $id === $want || 0 === strcasecmp( trim( (string) $title ), $want ) ) {
+				return (string) $id;
+			}
 		}
 	}
 	return '';
@@ -394,7 +402,7 @@ function leadkit_person_upsert( $args ) {
 		if ( $args['visitor'] ) {
 			$values[ $cols['ids'] ] = array( 'text' => $args['visitor'] );
 		}
-		$group     = leadkit_form_people_group( $people );
+		$group     = leadkit_form_people_group( $people, (string) ( $args['group'] ?? '' ) );
 		$vars      = array( 'b' => $people, 'n' => $args['name'] ?: $email, 'v' => wp_json_encode( $values ) );
 		if ( $group ) {
 			$vars['g'] = $group;

@@ -112,6 +112,45 @@ function leadkit_monday_form_def( $token, $board, $fresh = false ) {
 }
 
 /**
+ * The People group a form's new people go in, set on the shortcode with
+ * people_group="…" (a group title as the People board shows it, or its id).
+ *
+ * Kept on the server, by board, when the shortcode renders — never read from
+ * the submission, so nobody can post their way into another group. A form
+ * without the attribute forgets any group it had, and its people go to
+ * Settings → LeadKit → Group for new people from forms, as before.
+ *
+ * @param string $board Board id.
+ * @param string $group Group title or id ('' for none).
+ */
+function leadkit_mform_remember_group( $board, $group ) {
+	$board  = preg_replace( '/\D/', '', (string) $board );
+	$group  = sanitize_text_field( (string) $group );
+	$groups = get_option( 'leadkit_mform_groups', array() );
+	$groups = is_array( $groups ) ? $groups : array();
+	if ( '' === $board || ( $groups[ $board ] ?? '' ) === $group ) {
+		return;
+	}
+	if ( '' === $group ) {
+		unset( $groups[ $board ] );
+	} else {
+		$groups[ $board ] = $group;
+	}
+	update_option( 'leadkit_mform_groups', $groups, false );
+}
+
+/**
+ * The People group a form board's shortcode asked for, or ''.
+ *
+ * @param string $board Board id.
+ * @return string
+ */
+function leadkit_mform_group( $board ) {
+	$groups = get_option( 'leadkit_mform_groups', array() );
+	return is_array( $groups ) ? (string) ( $groups[ preg_replace( '/\D/', '', (string) $board ) ] ?? '' ) : '';
+}
+
+/**
  * The browser's autocomplete hint for a question, from its type and title.
  *
  * @param array $q Question.
@@ -158,6 +197,7 @@ function leadkit_monday_form_shortcode( $atts ) {
 			'submit_text'  => __( 'Submit', 'leadkit' ),
 			'show_title'   => '',
 			'success'      => '',
+			'people_group' => '',
 		),
 		$atts,
 		'leadkit_monday_form'
@@ -167,6 +207,9 @@ function leadkit_monday_form_shortcode( $atts ) {
 	$board = preg_replace( '/\D/', '', $atts['board'] );
 	$name  = sanitize_key( $atts['name'] ) ?: 'monday-form';
 	$p     = preg_replace( '/[^a-zA-Z0-9_-]/', '', $atts['class_prefix'] ) ?: 'lk-form';
+	if ( $board ) {
+		leadkit_mform_remember_group( $board, $atts['people_group'] );
+	}
 
 	if ( ! $token || ! $board ) {
 		return current_user_can( 'edit_posts' ) ? '<p>' . esc_html__( 'LeadKit: the monday form needs form="" and board="".', 'leadkit' ) . '</p>' : '';
@@ -639,6 +682,7 @@ function leadkit_handle_monday_form( $req ) {
 				'summary' => $summary_data,
 				'form'    => $def['title'],
 				'details' => $details,
+				'group'   => leadkit_mform_group( $board ),
 			);
 			/*
 			 * The person and the browser's Visitors row in a request of their
